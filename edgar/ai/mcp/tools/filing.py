@@ -2,7 +2,7 @@
 Filing Reader Tool
 
 Read SEC filing content - full filing or specific sections.
-Handles 10-K, 10-Q, 8-K, proxy statements, and other form types.
+Handles 10-K, 10-Q, 8-K, proxy statements, 13D/G, 13F, and other form types.
 """
 
 from __future__ import annotations
@@ -24,7 +24,6 @@ logger = logging.getLogger(__name__)
 
 # Section mapping for different form types.
 # For 10-K: maps MCP section names to the friendly-name keys accepted by TenK.__getitem__
-# (which supports 'business', 'risk_factors', 'mda', 'Item 1', 'Item 7', etc.)
 SECTION_MAP_10K = {
     "business": "business",
     "risk_factors": "risk_factors",
@@ -35,7 +34,6 @@ SECTION_MAP_10K = {
 }
 
 # For 10-Q: maps MCP section names to the Part/Item keys accepted by TenQ.__getitem__
-# ('Part I, Item 2', 'Part II, Item 1A', etc. are the canonical formats TenQ supports)
 SECTION_MAP_10Q = {
     "financials": "Part I, Item 1",
     "mda": "Part I, Item 2",
@@ -45,19 +43,25 @@ SECTION_MAP_10Q = {
     "market_risk": "Part I, Item 3",
 }
 
+# Form types that have dedicated extractors (keyed by base form, without /A suffix)
+FORM_EXTRACTORS = {"10-K", "10-Q", "8-K", "DEF 14A", "SC 13D", "SC 13G", "SC 13D/A", "SC 13G/A", "13F-HR"}
+
 
 @tool(
     name="edgar_filing",
     description="""Read SEC filing content. Get full filing metadata or specific sections.
 
-For 10-K/10-Q: extracts business description, risk factors, MD&A, financials.
-For 8-K: extracts event items.
-For proxy (DEF 14A): extracts compensation, governance info.
+For 10-K/10-Q: business, risk_factors, mda, financials, controls, legal
+For 8-K: items (event list + content), press_release, earnings
+For DEF 14A (proxy): compensation, pay_performance, governance
+For SC 13D/13G: ownership (shares, percent), purpose
+For 13F-HR: holdings, summary
 
 Examples:
-- Get filing: accession_number="0000320193-23-000077"
-- Latest 10-K sections: identifier="AAPL", form="10-K", sections=["business", "risk_factors"]
-- Full content: accession_number="...", sections=["all"]""",
+- Latest 10-K: identifier="AAPL", form="10-K", sections=["business", "risk_factors"]
+- 8-K events: identifier="AAPL", form="8-K", sections=["items"]
+- CEO pay: identifier="AAPL", form="DEF 14A", sections=["compensation"]
+- Activist stake: identifier="AAPL", form="SC 13D", sections=["ownership"]""",
     params={
         "accession_number": {
             "type": "string",
@@ -75,9 +79,9 @@ Examples:
             "type": "array",
             "items": {
                 "type": "string",
-                "enum": ["summary", "business", "risk_factors", "mda", "financials", "all"]
             },
-            "description": "Sections to extract. 'summary' (default) gives metadata only. 'all' extracts everything.",
+            "description": "Sections to extract. Use 'summary' for metadata only, 'all' for everything. "
+                           "Available sections depend on form type.",
             "default": ["summary"]
         }
     },
@@ -116,12 +120,7 @@ async def edgar_filing(
         }
 
         # Determine available sections based on form type
-        if filing.form in ["10-K", "10-K/A"]:
-            result["available_sections"] = list(SECTION_MAP_10K.keys())
-        elif filing.form in ["10-Q", "10-Q/A"]:
-            result["available_sections"] = list(SECTION_MAP_10Q.keys())
-        else:
-            result["available_sections"] = ["full_text"]
+        result["available_sections"] = _get_section_list(filing.form)
 
         # Extract requested sections
         if "summary" not in sections or len(sections) > 1:
@@ -203,10 +202,19 @@ async def _extract_sections(filing, sections: list[str]) -> dict[str, Any]:
 
 def _get_section_list(form_type: str) -> list[str]:
     """Get list of extractable sections for a form type."""
-    if form_type in ["10-K", "10-K/A"]:
+    base = form_type.replace("/A", "").strip()
+    if base == "10-K":
         return list(SECTION_MAP_10K.keys())
-    elif form_type in ["10-Q", "10-Q/A"]:
+    elif base == "10-Q":
         return list(SECTION_MAP_10Q.keys())
+    elif base == "8-K":
+        return ["items", "press_release", "earnings"]
+    elif base == "DEF 14A":
+        return ["compensation", "pay_performance", "governance"]
+    elif base in ("SC 13D", "SC 13G"):
+        return ["ownership", "purpose"]
+    elif base == "13F-HR":
+        return ["holdings", "summary"]
     else:
         return ["full_text"]
 
@@ -214,51 +222,29 @@ def _get_section_list(form_type: str) -> list[str]:
 def _extract_section(obj, form_type: str, section: str) -> Optional[str]:
     """Extract a specific section from a filing object.
 
-    Uses __getitem__ (item/key access) rather than attribute access because
-    TenQ and TenK expose content via __getitem__ with Part/Item keys or friendly
-    names, not as object attributes.  Attribute access on these objects raises
-    AttributeError for narrative sections and therefore always returns None.
-
-    Special case: 'financials' returns the structured XBRL representation via
-    the obj.financials cached property, which is a Financials object.
+    Routes to form-specific extractors for structured forms, with
+    fallback to __getitem__ for 10-K/10-Q narrative sections.
     """
-    # Special handling for financials: use the Financials object's structured repr
-    if section == "financials":
-        try:
-            fin = obj.financials
-            if fin is not None:
-                # Return a human-readable summary of the financial statements
-                parts = []
-                try:
-                    income = fin.income_statement()
-                    if income is not None:
-                        parts.append(f"=== Income Statement ===\n{income}")
-                except Exception:
-                    pass
-                try:
-                    balance = fin.balance_sheet()
-                    if balance is not None:
-                        parts.append(f"=== Balance Sheet ===\n{balance}")
-                except Exception:
-                    pass
-                try:
-                    cashflow = fin.cashflow_statement()
-                    if cashflow is not None:
-                        parts.append(f"=== Cash Flow Statement ===\n{cashflow}")
-                except Exception:
-                    pass
-                if parts:
-                    return "\n\n".join(parts)
-                # Fall back to str() representation if no structured data
-                return str(fin)
-        except Exception:
-            pass
-        return None
+    base = form_type.replace("/A", "").strip()
 
-    # For narrative sections, look up the canonical key for this form type
-    if form_type in ["10-K", "10-K/A"]:
+    # Special handling for financials (10-K/10-Q)
+    if section == "financials":
+        return _extract_financials(obj)
+
+    # Route to form-specific extractors
+    if base == "8-K":
+        return _extract_8k_section(obj, section)
+    elif base == "DEF 14A":
+        return _extract_proxy_section(obj, section)
+    elif base in ("SC 13D", "SC 13G"):
+        return _extract_schedule13_section(obj, section)
+    elif base == "13F-HR":
+        return _extract_13f_section(obj, section)
+
+    # For 10-K/10-Q narrative sections, look up the canonical key
+    if base == "10-K":
         section_key = SECTION_MAP_10K.get(section)
-    elif form_type in ["10-Q", "10-Q/A"]:
+    elif base == "10-Q":
         section_key = SECTION_MAP_10Q.get(section)
     else:
         section_key = None
@@ -272,12 +258,220 @@ def _extract_section(obj, form_type: str, section: str) -> Optional[str]:
             pass
 
     # Last-resort fallback: try the section name directly as a __getitem__ key
-    # This handles edge cases and future form types
     try:
         content = obj[section]
         if content:
             return str(content)
     except (KeyError, TypeError, AttributeError):
         pass
+
+    return None
+
+
+def _extract_financials(obj) -> Optional[str]:
+    """Extract XBRL financial statements from a filing object."""
+    try:
+        fin = obj.financials
+        if fin is not None:
+            parts = []
+            for name, method in [("Income Statement", "income_statement"),
+                                 ("Balance Sheet", "balance_sheet"),
+                                 ("Cash Flow Statement", "cashflow_statement")]:
+                try:
+                    stmt = getattr(fin, method)()
+                    if stmt is not None:
+                        parts.append(f"=== {name} ===\n{stmt}")
+                except Exception:
+                    pass
+            if parts:
+                return "\n\n".join(parts)
+            return str(fin)
+    except Exception:
+        pass
+    return None
+
+
+def _extract_8k_section(obj, section: str) -> Optional[str]:
+    """Extract sections from an 8-K (CurrentReport) object."""
+    if section == "items":
+        try:
+            items = obj.items
+            if not items:
+                return "No items detected in this 8-K."
+            parts = [f"Items: {', '.join(items)}"]
+            for item_name in items:
+                try:
+                    content = obj[item_name]
+                    if content:
+                        parts.append(f"\n--- {item_name} ---\n{content}")
+                except (KeyError, TypeError):
+                    pass
+            return "\n".join(parts)
+        except Exception as e:
+            logger.debug(f"Could not extract 8-K items: {e}")
+            return None
+
+    elif section == "press_release":
+        try:
+            if hasattr(obj, 'press_releases') and obj.press_releases:
+                return str(obj.press_releases)
+            if hasattr(obj, 'has_press_release') and not obj.has_press_release:
+                return "No press release attached to this 8-K."
+        except Exception as e:
+            logger.debug(f"Could not extract press release: {e}")
+        return None
+
+    elif section == "earnings":
+        try:
+            if hasattr(obj, 'has_earnings') and not obj.has_earnings:
+                return "This 8-K does not contain earnings data."
+            parts = []
+            if hasattr(obj, 'earnings') and obj.earnings:
+                parts.append(f"Earnings data available")
+            for name, method in [("Income Statement", "income_statement"),
+                                 ("Balance Sheet", "balance_sheet"),
+                                 ("Cash Flow", "cash_flow_statement")]:
+                try:
+                    stmt = getattr(obj, method)()
+                    if stmt is not None:
+                        parts.append(f"\n=== {name} ===\n{stmt}")
+                except Exception:
+                    pass
+            return "\n".join(parts) if parts else None
+        except Exception as e:
+            logger.debug(f"Could not extract earnings: {e}")
+        return None
+
+    return None
+
+
+def _extract_proxy_section(obj, section: str) -> Optional[str]:
+    """Extract sections from a DEF 14A (ProxyStatement) object."""
+    if section == "compensation":
+        try:
+            parts = []
+            if hasattr(obj, 'peo_name') and obj.peo_name:
+                parts.append(f"CEO/PEO: {obj.peo_name}")
+            if hasattr(obj, 'peo_total_comp') and obj.peo_total_comp is not None:
+                parts.append(f"PEO Total Compensation: ${obj.peo_total_comp:,.0f}")
+            if hasattr(obj, 'neo_avg_total_comp') and obj.neo_avg_total_comp is not None:
+                parts.append(f"NEO Average Total Compensation: ${obj.neo_avg_total_comp:,.0f}")
+            if hasattr(obj, 'executive_compensation'):
+                comp = obj.executive_compensation
+                if comp is not None and not comp.empty:
+                    parts.append(f"\n=== Executive Compensation Table ===\n{comp.to_string()}")
+            return "\n".join(parts) if parts else None
+        except Exception as e:
+            logger.debug(f"Could not extract compensation: {e}")
+        return None
+
+    elif section == "pay_performance":
+        try:
+            parts = []
+            if hasattr(obj, 'total_shareholder_return') and obj.total_shareholder_return is not None:
+                parts.append(f"Total Shareholder Return: {obj.total_shareholder_return}")
+            if hasattr(obj, 'company_selected_measure') and obj.company_selected_measure:
+                parts.append(f"Company-Selected Measure: {obj.company_selected_measure}")
+                if hasattr(obj, 'company_selected_measure_value') and obj.company_selected_measure_value is not None:
+                    parts.append(f"  Value: {obj.company_selected_measure_value}")
+            if hasattr(obj, 'pay_vs_performance'):
+                pvp = obj.pay_vs_performance
+                if pvp is not None and not pvp.empty:
+                    parts.append(f"\n=== Pay vs Performance Table ===\n{pvp.to_string()}")
+            return "\n".join(parts) if parts else None
+        except Exception as e:
+            logger.debug(f"Could not extract pay vs performance: {e}")
+        return None
+
+    elif section == "governance":
+        try:
+            parts = []
+            if hasattr(obj, 'performance_measures'):
+                measures = obj.performance_measures
+                if measures:
+                    parts.append(f"Performance Measures: {', '.join(measures)}")
+            if hasattr(obj, 'insider_trading_policy_adopted'):
+                policy = obj.insider_trading_policy_adopted
+                if policy is not None:
+                    parts.append(f"Insider Trading Policy Adopted: {policy}")
+            return "\n".join(parts) if parts else None
+        except Exception as e:
+            logger.debug(f"Could not extract governance: {e}")
+        return None
+
+    return None
+
+
+def _extract_schedule13_section(obj, section: str) -> Optional[str]:
+    """Extract sections from a Schedule 13D/13G object."""
+    if section == "ownership":
+        try:
+            parts = []
+            if hasattr(obj, 'is_amendment'):
+                parts.append(f"Amendment: {obj.is_amendment}")
+            if hasattr(obj, 'total_shares') and obj.total_shares is not None:
+                parts.append(f"Total Shares: {obj.total_shares:,}")
+            if hasattr(obj, 'total_percent') and obj.total_percent is not None:
+                parts.append(f"Ownership Percentage: {obj.total_percent:.1f}%")
+            if hasattr(obj, 'is_passive_investor'):
+                parts.append(f"Passive Investor: {obj.is_passive_investor}")
+            return "\n".join(parts) if parts else None
+        except Exception as e:
+            logger.debug(f"Could not extract 13D/G ownership: {e}")
+        return None
+
+    elif section == "purpose":
+        # Try to get the purpose of transaction text
+        try:
+            # Schedule 13D Item 4 is "Purpose of Transaction"
+            if hasattr(obj, 'purpose_of_transaction'):
+                return str(obj.purpose_of_transaction)
+            # Fallback: try generic string representation
+            return str(obj)
+        except Exception as e:
+            logger.debug(f"Could not extract 13D/G purpose: {e}")
+        return None
+
+    return None
+
+
+def _extract_13f_section(obj, section: str) -> Optional[str]:
+    """Extract sections from a 13F-HR (ThirteenF) object."""
+    if section == "holdings":
+        try:
+            if hasattr(obj, 'holdings') and obj.holdings:
+                parts = []
+                for h in obj.holdings[:30]:  # Limit to top 30
+                    name = getattr(h, 'name', None) or getattr(h, 'issuer', 'Unknown')
+                    shares = getattr(h, 'shares', None)
+                    value = getattr(h, 'value', None)
+                    line = f"  {name}"
+                    if shares:
+                        line += f" | {shares:,} shares"
+                    if value:
+                        line += f" | ${value:,}"
+                    parts.append(line)
+                total = len(obj.holdings)
+                header = f"Top holdings ({min(30, total)} of {total}):"
+                return header + "\n" + "\n".join(parts)
+        except Exception as e:
+            logger.debug(f"Could not extract 13F holdings: {e}")
+        return None
+
+    elif section == "summary":
+        try:
+            parts = []
+            if hasattr(obj, 'management_company_name') and obj.management_company_name:
+                parts.append(f"Management Company: {obj.management_company_name}")
+            if hasattr(obj, 'report_period') and obj.report_period:
+                parts.append(f"Report Period: {obj.report_period}")
+            if hasattr(obj, 'total_holdings') and obj.total_holdings is not None:
+                parts.append(f"Total Holdings: {obj.total_holdings}")
+            if hasattr(obj, 'total_value') and obj.total_value is not None:
+                parts.append(f"Total Value: ${obj.total_value:,}")
+            return "\n".join(parts) if parts else None
+        except Exception as e:
+            logger.debug(f"Could not extract 13F summary: {e}")
+        return None
 
     return None

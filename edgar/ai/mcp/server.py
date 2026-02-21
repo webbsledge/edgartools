@@ -14,9 +14,11 @@ Design principles:
 Tools:
 - edgar_company: Get company info, financials, filings, ownership in one call
 - edgar_search: Search companies and/or filings
-- edgar_filing: Read SEC filing content and sections
+- edgar_filing: Read SEC filing content and sections (10-K, 10-Q, 8-K, DEF 14A, 13D/G, 13F)
 - edgar_compare: Compare multiple companies or analyze industry
-- edgar_ownership: Insider transactions, institutional holders, fund portfolios
+- edgar_ownership: Insider transactions, fund portfolios
+- edgar_monitor: Real-time SEC filings feed
+- edgar_trends: Financial time series with growth rates
 
 Usage:
     python -m edgar.ai.mcp        # Via module
@@ -83,6 +85,8 @@ def _import_tools():
     from edgar.ai.mcp.tools import filing  # noqa: F401
     from edgar.ai.mcp.tools import compare  # noqa: F401
     from edgar.ai.mcp.tools import ownership  # noqa: F401
+    from edgar.ai.mcp.tools import monitor  # noqa: F401
+    from edgar.ai.mcp.tools import trends  # noqa: F401
 
 
 # Create the server
@@ -211,6 +215,23 @@ Get ownership information.
 ```json
 {"identifier": "AAPL", "analysis_type": "insiders"}
 {"identifier": "1067983", "analysis_type": "fund_portfolio"}
+```
+
+### edgar_monitor
+Get latest SEC filings in real-time.
+
+```json
+{}
+{"form": "8-K"}
+{"form": "4", "limit": 50}
+```
+
+### edgar_trends
+Get financial time series with growth rates.
+
+```json
+{"identifier": "AAPL"}
+{"identifier": "MSFT", "concepts": ["revenue", "net_income", "eps"], "periods": 10}
 ```
 
 ## Tips
