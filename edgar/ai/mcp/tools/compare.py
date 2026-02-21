@@ -19,6 +19,30 @@ from edgar.ai.mcp.tools.base import (
 
 logger = logging.getLogger(__name__)
 
+# Mapping from metric names to the statement type that provides them
+METRIC_STATEMENT_MAP = {
+    "revenue": "income",
+    "net_income": "income",
+    "gross_profit": "income",
+    "operating_income": "income",
+    "assets": "balance",
+    "liabilities": "balance",
+    "equity": "balance",
+    "margins": "income",
+    "growth": "income",
+}
+
+# Mapping from metric names to EntityFacts getter methods
+METRIC_GETTERS = {
+    "revenue": "get_revenue",
+    "net_income": "get_net_income",
+    "gross_profit": "get_gross_profit",
+    "operating_income": "get_operating_income",
+    "assets": "get_total_assets",
+    "liabilities": "get_total_liabilities",
+    "equity": "get_shareholders_equity",
+}
+
 # Industry to helper function mapping
 INDUSTRY_FUNCTIONS = {
     "pharmaceuticals": "get_pharmaceutical_companies",
@@ -60,7 +84,7 @@ Examples:
             "items": {
                 "type": "string",
                 "enum": ["revenue", "net_income", "gross_profit", "operating_income",
-                         "assets", "liabilities", "equity", "cash", "margins", "growth"]
+                         "assets", "liabilities", "equity", "margins", "growth"]
             },
             "description": "Metrics to compare (default: revenue, net_income)",
             "default": ["revenue", "net_income"]
@@ -197,7 +221,7 @@ async def _compare_company(
     periods: int,
     annual: bool
 ) -> dict:
-    """Get comparison data for a single company."""
+    """Get comparison data for a single company, extracting requested metrics."""
     try:
         company = resolve_company(identifier)
 
@@ -207,18 +231,106 @@ async def _compare_company(
             "cik": str(company.cik),
         }
 
-        # Get financials
         try:
-            income = company.income_statement(periods=periods, annual=annual)
-
-            # Extract key metrics
-            if hasattr(income, 'to_llm_string'):
-                result["income_statement"] = income.to_llm_string()
-            else:
-                result["income_statement"] = str(income)
-
+            facts = company.get_facts()
         except Exception as e:
             result["financials_error"] = str(e)
+            return result
+
+        extracted = {}
+        # Track raw values for derived metric computation
+        _revenue_val = None
+        _net_income_val = None
+        _gross_profit_val = None
+
+        for metric in metrics:
+            if metric in ("margins", "growth"):
+                continue  # Derived metrics handled below
+
+            getter_name = METRIC_GETTERS.get(metric)
+            if not getter_name:
+                continue
+
+            try:
+                getter = getattr(facts, getter_name, None)
+                if getter:
+                    value = getter(annual=annual)
+                    if value is not None:
+                        extracted[metric] = value
+                        # Cache for derived metrics
+                        if metric == "revenue":
+                            _revenue_val = value
+                        elif metric == "net_income":
+                            _net_income_val = value
+                        elif metric == "gross_profit":
+                            _gross_profit_val = value
+            except Exception as e:
+                logger.debug(f"Could not get {metric} for {identifier}: {e}")
+
+        # Compute margins if requested
+        if "margins" in metrics:
+            # Fetch revenue/net_income/gross_profit if not already fetched
+            if _revenue_val is None:
+                try:
+                    _revenue_val = facts.get_revenue(annual=annual)
+                except Exception:
+                    pass
+            if _net_income_val is None:
+                try:
+                    _net_income_val = facts.get_net_income(annual=annual)
+                except Exception:
+                    pass
+            if _gross_profit_val is None:
+                try:
+                    _gross_profit_val = facts.get_gross_profit(annual=annual)
+                except Exception:
+                    pass
+
+            if _revenue_val and _revenue_val != 0:
+                if _net_income_val is not None:
+                    extracted["net_margin"] = f"{_net_income_val / _revenue_val * 100:.1f}%"
+                if _gross_profit_val is not None:
+                    extracted["gross_margin"] = f"{_gross_profit_val / _revenue_val * 100:.1f}%"
+
+        # Compute revenue growth if requested (uses time_series for YoY)
+        if "growth" in metrics:
+            try:
+                ts = facts.time_series("Revenue", periods=periods + 1)
+                if ts is not None and not ts.empty:
+                    # Filter to annual periods only
+                    annual_ts = ts[ts['fiscal_period'] == 'FY'] if annual else ts
+                    if len(annual_ts) >= 2:
+                        values = annual_ts['numeric_value'].tolist()
+                        if len(values) >= 2 and values[1] and values[1] != 0:
+                            extracted["revenue_growth_yoy"] = f"{(values[0] - values[1]) / abs(values[1]) * 100:.1f}%"
+            except Exception as e:
+                logger.debug(f"Could not compute growth for {identifier}: {e}")
+
+        result["metrics"] = extracted
+
+        # Include statements for context based on which statement types are needed
+        needs_income = any(METRIC_STATEMENT_MAP.get(m) == "income" for m in metrics)
+        needs_balance = any(METRIC_STATEMENT_MAP.get(m) == "balance" for m in metrics)
+
+        if needs_income:
+            try:
+                income = facts.income_statement(periods=periods, annual=annual)
+                if hasattr(income, 'to_llm_string'):
+                    result["income_statement"] = income.to_llm_string()
+                else:
+                    result["income_statement"] = str(income)
+            except Exception as e:
+                logger.debug(f"Could not get income statement for {identifier}: {e}")
+
+        if needs_balance:
+            try:
+                balance = facts.balance_sheet(periods=periods, annual=annual)
+                if hasattr(balance, 'to_llm_string'):
+                    result["balance_sheet"] = balance.to_llm_string()
+                else:
+                    result["balance_sheet"] = str(balance)
+            except Exception as e:
+                logger.debug(f"Could not get balance sheet for {identifier}: {e}")
 
         return result
 

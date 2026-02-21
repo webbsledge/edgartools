@@ -448,16 +448,17 @@ class TestEdgarOwnershipTool:
         assert result.data["analysis"] == "insider_transactions"
 
     @pytest.mark.asyncio
-    async def test_institutional_holders(self):
-        """Get institutional holders info."""
+    async def test_institutional_holders_removed(self):
+        """institutions analysis type returns helpful error with redirect."""
         from edgar.ai.mcp.tools.ownership import edgar_ownership
 
         result = await edgar_ownership(
             identifier="AAPL",
             analysis_type="institutions",
         )
-        assert result.success is True
-        assert result.data["analysis"] == "institutional_holders"
+        assert result.success is False
+        assert "removed" in result.error
+        assert len(result.suggestions) > 0
 
     @pytest.mark.asyncio
     async def test_fund_portfolio(self):

@@ -272,14 +272,67 @@ def format_company_profile(company) -> dict:
     if hasattr(company, 'sic') and company.sic:
         profile["sic"] = company.sic
 
-    if hasattr(company, 'sic_description') and company.sic_description:
-        profile["industry"] = company.sic_description
+    sic_desc = getattr(company, 'sic_description', None) or getattr(getattr(company, 'data', None), 'sic_description', None)
+    if sic_desc:
+        profile["industry"] = sic_desc
 
     if hasattr(company, 'state_of_incorporation'):
         profile["state"] = company.state_of_incorporation
 
     if hasattr(company, 'fiscal_year_end'):
         profile["fiscal_year_end"] = company.fiscal_year_end
+
+    # Exchanges
+    if hasattr(company, 'get_exchanges'):
+        try:
+            exchanges = company.get_exchanges()
+            if exchanges:
+                profile["exchanges"] = exchanges
+        except Exception:
+            pass
+
+    # Business category (Operating Company, REIT, ETF, Bank, etc.)
+    try:
+        category = company.business_category
+        if category:
+            profile["business_category"] = category
+    except Exception:
+        pass
+
+    # Filer category (Large Accelerated, Accelerated, etc.)
+    try:
+        filer_cat = company.filer_category
+        if filer_cat:
+            profile["filer_status"] = str(filer_cat.status.value) if filer_cat.status else None
+            if filer_cat.is_smaller_reporting_company:
+                profile["smaller_reporting_company"] = True
+            if filer_cat.is_emerging_growth_company:
+                profile["emerging_growth_company"] = True
+    except Exception:
+        pass
+
+    # Foreign filer info
+    try:
+        if company.is_foreign:
+            profile["is_foreign"] = True
+            profile["filer_type"] = company.filer_type
+    except Exception:
+        pass
+
+    # Shares outstanding and public float
+    try:
+        shares = company.shares_outstanding
+        if shares is not None:
+            profile["shares_outstanding"] = shares
+    except Exception:
+        pass
+
+    try:
+        pub_float = company.public_float
+        if pub_float is not None:
+            profile["public_float"] = pub_float
+    except Exception:
+        pass
 
     return profile
 

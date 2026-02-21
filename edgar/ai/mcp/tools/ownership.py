@@ -22,24 +22,24 @@ logger = logging.getLogger(__name__)
 
 @tool(
     name="edgar_ownership",
-    description="""Get ownership data: insider transactions, institutional holders, or fund portfolios.
+    description="""Get ownership data: insider transactions or fund/institution portfolios.
 
-- For companies: shows WHO owns the stock (insiders, institutions)
-- For funds/institutions: shows WHAT they own (13F portfolio)
+- For companies: shows insider trading activity (Form 4 filings)
+- For funds/institutions: shows WHAT they own (13F portfolio holdings)
 
 Examples:
 - Insider trades: identifier="AAPL", analysis_type="insiders"
-- Who owns Apple: identifier="AAPL", analysis_type="institutions"
-- Berkshire portfolio: identifier="1067983", analysis_type="fund_portfolio\"""",
+- Berkshire portfolio: identifier="1067983", analysis_type="fund_portfolio"
+- Vanguard holdings: identifier="102909", analysis_type="fund_portfolio\"""",
     params={
         "identifier": {
             "type": "string",
-            "description": "Company ticker/CIK OR fund/institution CIK"
+            "description": "Company ticker/CIK (for insiders) OR fund/institution CIK (for fund_portfolio)"
         },
         "analysis_type": {
             "type": "string",
-            "enum": ["insiders", "institutions", "fund_portfolio"],
-            "description": "insiders=Form 4 trades, institutions=13F holders, fund_portfolio=what a fund owns"
+            "enum": ["insiders", "fund_portfolio"],
+            "description": "insiders=Form 4 insider trades, fund_portfolio=13F institutional holdings"
         },
         "days": {
             "type": "integer",
@@ -68,14 +68,23 @@ async def edgar_ownership(
     try:
         if analysis_type == "insiders":
             return await _get_insider_transactions(identifier, days, limit)
-        elif analysis_type == "institutions":
-            return await _get_institutional_holders(identifier, limit)
         elif analysis_type == "fund_portfolio":
             return await _get_fund_holdings(identifier, limit)
+        elif analysis_type == "institutions":
+            # Graceful redirect for legacy callers
+            return error(
+                "The 'institutions' analysis type has been removed. SEC EDGAR does not "
+                "provide a reverse-lookup API for institutional holders of a stock.",
+                suggestions=[
+                    "Use analysis_type='fund_portfolio' with a fund's CIK to see what it holds",
+                    "Use edgar_search with form='13F-HR' to find institutional filings",
+                    "Use analysis_type='insiders' to see insider trading activity",
+                ]
+            )
         else:
             return error(
                 f"Unknown analysis_type: {analysis_type}",
-                suggestions=["Use 'insiders', 'institutions', or 'fund_portfolio'"]
+                suggestions=["Use 'insiders' or 'fund_portfolio'"]
             )
 
     except Exception as e:
@@ -158,38 +167,8 @@ async def _get_insider_transactions(identifier: str, days: int, limit: int) -> A
         }
 
         next_steps = [
-            "Use analysis_type='institutions' to see institutional holders",
+            "Use analysis_type='fund_portfolio' with a fund's CIK to see its holdings",
             "Use edgar_company for full company analysis"
-        ]
-
-        return success(result, next_steps=next_steps)
-
-    except Exception as e:
-        return error(str(e), suggestions=get_error_suggestions(e))
-
-
-async def _get_institutional_holders(identifier: str, limit: int) -> Any:
-    """Get institutional holders information for a company."""
-    try:
-        company = resolve_company(identifier)
-
-        result = {
-            "company": company.name,
-            "cik": str(company.cik),
-            "analysis": "institutional_holders",
-            "limitation": (
-                "SEC EDGAR does not provide a direct API to list all institutional holders "
-                "of a specific stock. Institutional holdings are reported in 13F filings "
-                "filed by each institution separately. To find who holds this stock, you "
-                "would need to cross-reference thousands of 13F filings."
-            ),
-        }
-
-        next_steps = [
-            "To check if a specific fund holds this stock: use edgar_ownership with "
-            "the fund's CIK and analysis_type='fund_portfolio'",
-            "To browse recent institutional filings: use edgar_search with form='13F-HR'",
-            "To see insider trading instead: use edgar_ownership with analysis_type='insiders'",
         ]
 
         return success(result, next_steps=next_steps)

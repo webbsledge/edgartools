@@ -134,16 +134,7 @@ async def edgar_company(
 
 def _build_profile(company) -> dict:
     """Build company profile section."""
-    profile = format_company_profile(company)
-
-    # Add additional details if available
-    if hasattr(company, 'entity_type'):
-        profile["entity_type"] = company.entity_type
-
-    if hasattr(company, 'category'):
-        profile["category"] = company.category
-
-    return profile
+    return format_company_profile(company)
 
 
 def _format_statement(stmt) -> str | dict | list:
@@ -261,10 +252,10 @@ def _build_ownership(company) -> dict:
         logger.debug(f"Could not get insider data: {e}")
         ownership["insider_transactions"] = {"error": str(e)}
 
-    # Institutional holders summary
-    # Note: Full 13F analysis is complex - provide summary here
+    # Institutional holders note
     ownership["institutional_note"] = (
-        "Use edgar_ownership with analysis_type='institutions' for detailed institutional holder data"
+        "To see what a specific fund/institution holds, use edgar_ownership with "
+        "analysis_type='fund_portfolio' and the fund's CIK"
     )
 
     return ownership
