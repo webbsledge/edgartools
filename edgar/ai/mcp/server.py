@@ -19,6 +19,7 @@ Tools:
 - edgar_ownership: Insider transactions, fund portfolios
 - edgar_monitor: Real-time SEC filings feed
 - edgar_trends: Financial time series with growth rates
+- edgar_screen: Company discovery by industry, exchange, state
 
 Usage:
     python -m edgar.ai.mcp        # Via module
@@ -34,7 +35,7 @@ from mcp import Resource, Tool
 from mcp.server import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
-from mcp.types import TextContent
+from mcp.types import GetPromptResult, Prompt, TextContent
 
 # Set up logging
 logging.basicConfig(
@@ -87,6 +88,7 @@ def _import_tools():
     from edgar.ai.mcp.tools import ownership  # noqa: F401
     from edgar.ai.mcp.tools import monitor  # noqa: F401
     from edgar.ai.mcp.tools import trends  # noqa: F401
+    from edgar.ai.mcp.tools import screen  # noqa: F401
 
 
 # Create the server
@@ -101,14 +103,17 @@ async def list_tools() -> list[Tool]:
     # Ensure tools are imported
     _import_tools()
 
-    return [
-        Tool(
-            name=info["name"],
-            description=info["description"],
-            inputSchema=info["schema"]
-        )
-        for info in TOOLS.values()
-    ]
+    tools = []
+    for info in TOOLS.values():
+        kwargs = {
+            "name": info["name"],
+            "description": info["description"],
+            "inputSchema": info["schema"],
+        }
+        if "output_schema" in info:
+            kwargs["outputSchema"] = info["output_schema"]
+        tools.append(Tool(**kwargs))
+    return tools
 
 
 @app.call_tool()
@@ -168,6 +173,20 @@ async def read_resource(uri: str) -> str:
         return _get_tools_doc()
     else:
         raise ValueError(f"Unknown resource: {uri}")
+
+
+@app.list_prompts()
+async def handle_list_prompts() -> list[Prompt]:
+    """List available analysis prompts."""
+    from edgar.ai.mcp.tools.prompts import list_prompts
+    return list_prompts()
+
+
+@app.get_prompt()
+async def handle_get_prompt(name: str, arguments: dict[str, str] | None = None) -> GetPromptResult:
+    """Get a specific analysis prompt with arguments."""
+    from edgar.ai.mcp.tools.prompts import get_prompt
+    return get_prompt(name, arguments)
 
 
 def _get_quickstart_doc() -> str:
@@ -233,6 +252,23 @@ Get financial time series with growth rates.
 {"identifier": "AAPL"}
 {"identifier": "MSFT", "concepts": ["revenue", "net_income", "eps"], "periods": 10}
 ```
+
+### edgar_screen
+Discover companies by industry, exchange, or state.
+
+```json
+{"industry": "software"}
+{"exchange": "NYSE", "industry": "pharmaceutical"}
+{"state": "DE", "limit": 50}
+```
+
+## Prompts
+
+Pre-built analysis workflows:
+- **due_diligence**: Full company analysis (profile, financials, risks, insiders)
+- **earnings_analysis**: Earnings deep dive (8-K, trends, peer comparison)
+- **industry_overview**: Sector survey (screen, compare, trends)
+- **insider_monitor**: Insider trading activity analysis
 
 ## Tips
 

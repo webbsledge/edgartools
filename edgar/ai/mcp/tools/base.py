@@ -79,6 +79,41 @@ def error(
 
 
 # =============================================================================
+# OUTPUT SCHEMA
+# =============================================================================
+
+# All tools share this response envelope. MCP clients can use it
+# to validate responses without inspecting the data field.
+TOOL_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "success": {
+            "type": "boolean",
+            "description": "Whether the tool call succeeded"
+        },
+        "data": {
+            "description": "Tool-specific result data (present on success)"
+        },
+        "error": {
+            "type": "string",
+            "description": "Error message (present on failure)"
+        },
+        "suggestions": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Helpful suggestions for resolving errors"
+        },
+        "next_steps": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Suggested follow-up tool calls"
+        }
+    },
+    "required": ["success"]
+}
+
+
+# =============================================================================
 # TOOL REGISTRY
 # =============================================================================
 
@@ -86,7 +121,8 @@ def tool(
     name: str,
     description: str,
     params: dict[str, Any],
-    required: Optional[list[str]] = None
+    required: Optional[list[str]] = None,
+    output_schema: Optional[dict[str, Any]] = None,
 ):
     """
     Decorator to register MCP tools declaratively.
@@ -107,7 +143,7 @@ def tool(
             ...
     """
     def decorator(func: Callable) -> Callable:
-        TOOLS[name] = {
+        entry = {
             "name": name,
             "description": description,
             "handler": func,
@@ -115,8 +151,10 @@ def tool(
                 "type": "object",
                 "properties": params,
                 "required": required or []
-            }
+            },
+            "output_schema": output_schema or TOOL_OUTPUT_SCHEMA,
         }
+        TOOLS[name] = entry
 
         @wraps(func)
         async def wrapper(*args, **kwargs):
