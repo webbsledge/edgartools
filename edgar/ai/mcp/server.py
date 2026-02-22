@@ -20,6 +20,7 @@ Tools:
 - edgar_monitor: Real-time SEC filings feed
 - edgar_trends: Financial time series with growth rates
 - edgar_screen: Company discovery by industry, exchange, state
+- edgar_text_search: Full-text search across SEC filing content
 
 Usage:
     python -m edgar.ai.mcp        # Via module
@@ -89,6 +90,7 @@ def _import_tools():
     from edgar.ai.mcp.tools import monitor  # noqa: F401
     from edgar.ai.mcp.tools import trends  # noqa: F401
     from edgar.ai.mcp.tools import screen  # noqa: F401
+    from edgar.ai.mcp.tools import text_search  # noqa: F401
 
 
 # Create the server
@@ -234,6 +236,7 @@ Get ownership information.
 ```json
 {"identifier": "AAPL", "analysis_type": "insiders"}
 {"identifier": "1067983", "analysis_type": "fund_portfolio"}
+{"identifier": "1067983", "analysis_type": "portfolio_diff"}
 ```
 
 ### edgar_monitor
@@ -260,6 +263,15 @@ Discover companies by industry, exchange, or state.
 {"industry": "software"}
 {"exchange": "NYSE", "industry": "pharmaceutical"}
 {"state": "DE", "limit": 50}
+```
+
+### edgar_text_search
+Full-text search across SEC filing content.
+
+```json
+{"query": "artificial intelligence"}
+{"query": "cybersecurity incident", "forms": ["8-K"]}
+{"query": "tariff impact", "identifier": "AAPL", "start_date": "2024-01-01"}
 ```
 
 ## Prompts
