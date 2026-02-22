@@ -84,6 +84,7 @@ from edgar.storage import (
     use_datamule_storage,
     use_local_storage,
 )
+from edgar.search.efts import EFTSResult, EFTSSearch, search_filings
 from edgar.thirteenf import THIRTEENF_FORMS, ThirteenF
 from edgar.xbrl import XBRL
 

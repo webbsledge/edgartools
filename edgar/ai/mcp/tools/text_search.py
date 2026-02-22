@@ -1,8 +1,8 @@
 """
 Text Search Tool
 
-Full-text search across SEC filings using EDGAR EFTS
-(Electronic Full-Text Search) API.
+Full-text search across SEC filings using EDGAR EFTS.
+Thin MCP wrapper around edgar.search.efts.search_filings().
 """
 
 from __future__ import annotations
@@ -14,12 +14,10 @@ from edgar.ai.mcp.tools.base import (
     tool,
     success,
     error,
+    get_error_suggestions,
 )
 
 logger = logging.getLogger(__name__)
-
-# EFTS search endpoint
-EFTS_BASE_URL = "https://efts.sec.gov/LATEST/search-index"
 
 
 @tool(
@@ -84,109 +82,58 @@ async def edgar_text_search(
                 ]
             )
 
-        limit = min(max(limit, 1), 50)
+        from edgar.search.efts import search_filings
 
-        # Build request parameters
-        params: dict[str, Any] = {
-            "q": query.strip(),
-        }
-
-        # Form type filter
-        if forms:
-            params["forms"] = ",".join(forms)
-
-        # Date range
-        if start_date or end_date:
-            params["dateRange"] = "custom"
-            if start_date:
-                params["startdt"] = start_date
-            if end_date:
-                params["enddt"] = end_date
-
-        # Company filter — resolve to CIK for server-side filtering
-        entity_name = None
+        # Resolve identifier to ticker or CIK for the library function
+        ticker = None
+        cik = None
         if identifier:
-            try:
-                from edgar.ai.mcp.tools.base import resolve_company
-                company = resolve_company(identifier)
-                entity_name = company.name
-                # EFTS requires 10-digit zero-padded CIK
-                params["ciks"] = str(company.cik).zfill(10)
-            except ValueError:
-                # If it looks like a CIK, pad and use directly
-                cleaned = identifier.strip()
-                if cleaned.isdigit():
-                    params["ciks"] = cleaned.zfill(10)
-                else:
-                    return error(
-                        f"Could not find company: '{identifier}'",
-                        suggestions=[
-                            "Try a ticker (AAPL) or CIK number",
-                            "Remove the identifier to search all filings",
-                        ]
-                    )
+            cleaned = identifier.strip()
+            if cleaned.isdigit():
+                cik = cleaned
+            else:
+                ticker = cleaned
 
-        # Make the EFTS API request
-        import httpx
+        search_result = search_filings(
+            query,
+            forms=forms,
+            ticker=ticker,
+            cik=cik,
+            start_date=start_date,
+            end_date=end_date,
+            limit=min(limit, 50),
+        )
 
-        headers = {"User-Agent": _get_user_agent()}
-
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(EFTS_BASE_URL, params=params, headers=headers, timeout=30)
-            resp.raise_for_status()
-            data = resp.json()
-
-        # Parse results
-        hits = data.get("hits", {})
-        total = hits.get("total", {}).get("value", 0)
+        # Serialize to MCP response
         results = []
-
-        for hit in hits.get("hits", []):
-            source = hit.get("_source", {})
-
+        for r in search_result:
             filing_result = {
-                "accession_number": _format_accession(source.get("adsh", "")),
-                "form": source.get("form", ""),
-                "filed": source.get("file_date", ""),
+                "accession_number": r.accession_number,
+                "form": r.form,
+                "filed": r.filed,
             }
-
-            # Company info
-            names = source.get("display_names", [])
-            ciks = source.get("ciks", [])
-            if names:
-                filing_result["company"] = names[0]
-            if ciks:
-                filing_result["cik"] = str(ciks[0])
-
-            # Period
-            period = source.get("period_ending")
-            if period:
-                filing_result["period"] = period
-
+            if r.company:
+                filing_result["company"] = r.company
+            if r.cik:
+                filing_result["cik"] = r.cik
+            if r.period:
+                filing_result["period"] = r.period
             results.append(filing_result)
-
-            if len(results) >= limit:
-                break
 
         result = {
             "query": query,
-            "total_matches": total,
+            "total_matches": search_result.total,
             "count": len(results),
             "results": results,
         }
 
         if forms:
             result["forms_filter"] = forms
-        if entity_name:
-            result["company_filter"] = entity_name
         if start_date or end_date:
-            result["date_range"] = {
-                "start": start_date,
-                "end": end_date,
-            }
+            result["date_range"] = {"start": start_date, "end": end_date}
 
-        if total > limit:
-            result["note"] = f"Showing {len(results)} of {total} matches. Increase limit for more."
+        if search_result.total > len(results):
+            result["note"] = f"Showing {len(results)} of {search_result.total} matches. Increase limit for more."
 
         next_steps = [
             "Use edgar_filing with an accession_number to read the full filing content",
@@ -195,6 +142,8 @@ async def edgar_text_search(
 
         return success(result, next_steps=next_steps)
 
+    except ValueError as e:
+        return error(str(e), suggestions=get_error_suggestions(e))
     except Exception as e:
         logger.exception("Error in edgar_text_search")
         return error(
@@ -205,20 +154,3 @@ async def edgar_text_search(
                 "Check date format (YYYY-MM-DD)",
             ]
         )
-
-
-def _format_accession(adsh: str) -> str:
-    """Format EFTS accession number (no dashes) to standard format (with dashes)."""
-    adsh = adsh.replace("-", "")
-    if len(adsh) == 18:
-        return f"{adsh[:10]}-{adsh[10:12]}-{adsh[12:]}"
-    return adsh
-
-
-def _get_user_agent() -> str:
-    """Get configured user-agent for SEC requests."""
-    try:
-        from edgar.core import get_identity
-        return get_identity()
-    except Exception:
-        return "EdgarTools/MCP edgartools@example.com"
