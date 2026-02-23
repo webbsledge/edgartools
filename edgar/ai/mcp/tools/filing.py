@@ -43,6 +43,24 @@ SECTION_MAP_10Q = {
     "market_risk": "Part I, Item 3",
 }
 
+# For 20-F: maps MCP section names to keys accepted by TwentyF.__getitem__
+SECTION_MAP_20F = {
+    "business": "Item 4",           # Information on the Company
+    "risk_factors": "Item 3",       # Key Information (includes risk factors)
+    "mda": "Item 5",                # Operating and Financial Review (MD&A equivalent)
+    "financials": "financials",     # XBRL data via CompanyReport.financials
+    "directors": "Item 6",          # Directors, Senior Management and Employees
+    "shareholders": "Item 7",       # Major Shareholders and Related Party Transactions
+    "financial_info": "Item 8",     # Financial Information section
+    "controls": "Item 15",          # Controls and Procedures
+}
+
+# For 6-K: Current reports for foreign private issuers (unstructured)
+SECTION_MAP_6K = {
+    "financials": "financials",     # Financial statements via XBRL if available
+    "full_text": "full_text",       # Full document text
+}
+
 # Form types that have dedicated extractors (keyed by base form, without /A suffix)
 FORM_EXTRACTORS = {"10-K", "10-Q", "8-K", "DEF 14A", "SC 13D", "SC 13G", "SC 13D/A", "SC 13G/A", "13F-HR"}
 
@@ -52,6 +70,8 @@ FORM_EXTRACTORS = {"10-K", "10-Q", "8-K", "DEF 14A", "SC 13D", "SC 13G", "SC 13D
     description="""Read SEC filing content. Get full filing metadata or specific sections.
 
 For 10-K/10-Q: business, risk_factors, mda, financials, controls, legal
+For 20-F: business, risk_factors, mda, financials, directors, shareholders, financial_info, controls (foreign private issuers)
+For 6-K: financials, full_text (foreign private issuer current reports)
 For 8-K: items (event list + content), press_release, earnings
 For DEF 14A (proxy): compensation, pay_performance, governance
 For SC 13D/13G: ownership (shares, percent), purpose
@@ -59,6 +79,7 @@ For 13F-HR: holdings, summary
 
 Examples:
 - Latest 10-K: identifier="AAPL", form="10-K", sections=["business", "risk_factors"]
+- Foreign issuer 20-F: identifier="BNTX", form="20-F", sections=["business", "mda"]
 - 8-K events: identifier="AAPL", form="8-K", sections=["items"]
 - CEO pay: identifier="AAPL", form="DEF 14A", sections=["compensation"]
 - Activist stake: identifier="AAPL", form="SC 13D", sections=["ownership"]""",
@@ -207,6 +228,10 @@ def _get_section_list(form_type: str) -> list[str]:
         return list(SECTION_MAP_10K.keys())
     elif base == "10-Q":
         return list(SECTION_MAP_10Q.keys())
+    elif base == "20-F":
+        return list(SECTION_MAP_20F.keys())
+    elif base == "6-K":
+        return list(SECTION_MAP_6K.keys())
     elif base == "8-K":
         return ["items", "press_release", "earnings"]
     elif base == "DEF 14A":
@@ -246,6 +271,10 @@ def _extract_section(obj, form_type: str, section: str) -> Optional[str]:
         section_key = SECTION_MAP_10K.get(section)
     elif base == "10-Q":
         section_key = SECTION_MAP_10Q.get(section)
+    elif base == "20-F":
+        section_key = SECTION_MAP_20F.get(section)
+    elif base == "6-K":
+        section_key = SECTION_MAP_6K.get(section)
     else:
         section_key = None
 
