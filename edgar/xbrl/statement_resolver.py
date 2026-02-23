@@ -1199,44 +1199,35 @@ class StatementResolver:
         # Issue #608: Must validate that ComprehensiveIncome contains actual P&L data (Revenue)
         # Some filings have two roles: one with P&L, one with pure OCI items
         if statement_type == 'IncomeStatement':
-            # Try to find ComprehensiveIncome as a valid substitute
-            comp_match = self._match_by_standard_name('ComprehensiveIncome')
-            if not comp_match[0] or comp_match[2] < 0.9:
-                comp_match = self._match_by_primary_concept('ComprehensiveIncome', is_parenthetical)
-            if not comp_match[0] or comp_match[2] < 0.8:
-                comp_match = self._match_by_concept_pattern('ComprehensiveIncome', is_parenthetical)
-            if not comp_match[0] or comp_match[2] < 0.8:
-                comp_match = self._match_by_role_pattern('ComprehensiveIncome', is_parenthetical)
+            # Get ALL ComprehensiveIncome candidates from the type index directly.
+            # We bypass _match_by_standard_name here because its essential-concept
+            # filter (Issue #659) validates against ComprehensiveIncome criteria,
+            # which discards the P&L-containing statement we actually want.
+            # Instead, we validate against IncomeStatement criteria below.
+            all_comp_statements = list(self._statement_by_type.get('ComprehensiveIncome', []))
 
-            if comp_match[0] and comp_match[2] > 0.6:
-                statements, role, conf = comp_match
-
-                # Issue #608: Re-sort candidates by IncomeStatement criteria to prefer
+            if all_comp_statements:
+                # Issue #608: Sort candidates by IncomeStatement criteria to prefer
                 # statements with P&L data (Revenue, Operating Income) over pure OCI statements
-                # This is critical when a filing has multiple ComprehensiveIncome roles
-                if len(statements) > 1:
-                    statements = sorted(
-                        statements,
-                        key=lambda s: self._score_statement_quality(s, 'IncomeStatement'),
-                        reverse=True
-                    )
-                    role = statements[0]['role']
+                all_comp_statements = sorted(
+                    all_comp_statements,
+                    key=lambda s: self._score_statement_quality(s, 'IncomeStatement'),
+                    reverse=True
+                )
 
-                # Issue #608: Validate the selected statement has P&L data before using as fallback
-                is_valid, validation_conf, reason = self._validate_statement(statements[0], 'IncomeStatement')
-                if not is_valid:
-                    # This ComprehensiveIncome statement doesn't have P&L data (e.g., pure OCI)
-                    # Continue to error handling - don't use it as a substitute
-                    if VERBOSE_EXCEPTIONS:
-                        log.debug(f"ComprehensiveIncome fallback rejected: {reason}")
-                else:
-                    # Issue #518: Return actual type (ComprehensiveIncome) for transparency and accuracy
-                    # Users can check if they received a fallback by comparing requested vs actual type
-                    if VERBOSE_EXCEPTIONS:
-                        log.info(f"IncomeStatement not found, using ComprehensiveIncome as fallback (confidence: {conf:.2f})")
-                    result = (statements, role, 'ComprehensiveIncome', conf)
-                    self._cache[cache_key] = result
-                    return result
+                # Issue #608: Find the first candidate that passes IncomeStatement validation
+                for candidate in all_comp_statements:
+                    is_valid, validation_conf, reason = self._validate_statement(candidate, 'IncomeStatement')
+                    if is_valid:
+                        role = candidate['role']
+                        if VERBOSE_EXCEPTIONS:
+                            log.info(f"IncomeStatement not found, using ComprehensiveIncome as fallback (role: {role})")
+                        result = ([candidate], role, 'ComprehensiveIncome', 0.90)
+                        self._cache[cache_key] = result
+                        return result
+
+                if VERBOSE_EXCEPTIONS:
+                    log.debug("ComprehensiveIncome fallback rejected: no candidates contain P&L data")
 
         # No good match found, return best guess with low confidence
         statements, role, conf = self._get_best_guess(statement_type)
