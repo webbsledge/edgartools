@@ -1000,17 +1000,9 @@ class StatementResolver:
             if statements:
                 # Issue #506: Sort by statement quality to prefer correct statement type
                 statements = sorted(statements, key=lambda s: self._score_statement_quality(s, statement_type), reverse=True)
-                # Issue #659: Filter out candidates that fail essential-concept validation.
-                # This prevents mislabeled roles (e.g., a supplemental schedule with
-                # us-gaap_StatementOfFinancialPositionAbstract as root) from blocking
-                # the cascade to concept-pattern or content-based matchers.
-                if statement_type in ESSENTIAL_CONCEPTS:
-                    valid = [s for s in statements
-                             if self._validate_statement(s, statement_type)[0]]
-                    if valid:
-                        return valid, valid[0]['role'], 0.95
-                    # All candidates failed validation — fall through to cascade
-                    return [], None, 0.0
+                # Note: essential-concept validation is applied in the cascade in
+                # find_statement(), so we return all candidates here and let the
+                # cascade filter out mislabeled roles (Issue #659).
                 return statements, statements[0]['role'], 0.95
 
         return [], None, 0.0
@@ -1134,61 +1126,36 @@ class StatementResolver:
         # Check if this is a canonical statement type from the registry
         is_canonical_type = statement_type in statement_registry
 
-        # Try standard name matching first (exact type match)
-        match = self._match_by_standard_name(statement_type)
-        if match[0] and match[2] > 0.9:  # Very high confidence
-            statements, role, conf = match
-            # For canonical types, preserve the original statement_type
-            canonical_type = statement_type if is_canonical_type else statements[0].get('type', statement_type)
-            result = (statements, role, canonical_type, conf)
-            self._cache[cache_key] = result
-            return result
+        # Issue #659: Essential-concept validation applies across ALL cascade steps.
+        # A role may have the right name/concept but wrong content (e.g., MTD has
+        # StatementOfFinancialPositionAbstract as root but only contains Schedule II).
+        needs_validation = statement_type in ESSENTIAL_CONCEPTS
 
-        # Try primary concept matching
-        match = self._match_by_primary_concept(statement_type, is_parenthetical)
-        if match[0] and match[2] > 0.8:  # High confidence
-            statements, role, conf = match
-            # For canonical types, preserve the original statement_type
-            canonical_type = statement_type if is_canonical_type else statements[0].get('type', statement_type)
-            result = (statements, role, canonical_type, conf)
-            self._cache[cache_key] = result
-            return result
+        # Cascade through matching strategies in order of confidence
+        cascade = [
+            (self._match_by_standard_name(statement_type), 0.9),
+            (self._match_by_primary_concept(statement_type, is_parenthetical), 0.8),
+            (self._match_by_concept_pattern(statement_type, is_parenthetical), 0.8),
+            (self._match_by_role_pattern(statement_type, is_parenthetical), 0.7),
+            (self._match_by_content(statement_type), 0.6),
+            (self._match_by_role_definition(statement_type), 0.5),
+        ]
 
-        # Try custom namespace matching
-        match = self._match_by_concept_pattern(statement_type, is_parenthetical)
-        if match[0] and match[2] > 0.8:  # High confidence
+        for match, min_conf in cascade:
             statements, role, conf = match
-            # For canonical types, preserve the original statement_type
-            canonical_type = statement_type if is_canonical_type else statements[0].get('type', statement_type)
-            result = (statements, role, canonical_type, conf)
-            self._cache[cache_key] = result
-            return result
+            if not statements or conf < min_conf:
+                continue
 
-        # Try role pattern matching
-        match = self._match_by_role_pattern(statement_type, is_parenthetical)
-        if match[0] and match[2] > 0.7:  # Good confidence
-            statements, role, conf = match
-            # For canonical types, preserve the original statement_type
-            canonical_type = statement_type if is_canonical_type else statements[0].get('type', statement_type)
-            result = (statements, role, canonical_type, conf)
-            self._cache[cache_key] = result
-            return result
+            # Issue #659: Validate that the top candidate actually contains the
+            # essential concepts for this statement type. Filter out mislabeled roles.
+            if needs_validation:
+                valid = [s for s in statements
+                         if self._validate_statement(s, statement_type)[0]]
+                if not valid:
+                    continue
+                statements = valid
+                role = valid[0]['role']
 
-        # Try content-based analysis
-        match = self._match_by_content(statement_type)
-        if match[0] and match[2] > 0.6:  # Moderate confidence
-            statements, role, conf = match
-            # For canonical types, preserve the original statement_type
-            canonical_type = statement_type if is_canonical_type else statements[0].get('type', statement_type)
-            result = (statements, role, canonical_type, conf)
-            self._cache[cache_key] = result
-            return result
-
-        # Try role definition matching
-        match = self._match_by_role_definition(statement_type)
-        if match[0] and match[2] > 0.5:  # Lower confidence but still useful
-            statements, role, conf = match
-            # For canonical types, preserve the original statement_type
             canonical_type = statement_type if is_canonical_type else statements[0].get('type', statement_type)
             result = (statements, role, canonical_type, conf)
             self._cache[cache_key] = result
