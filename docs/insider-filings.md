@@ -19,6 +19,8 @@ form4
 
 Three lines to see who traded, what they traded, and the net impact on their position.
 
+> **[See Snowflake's insider trading activity on edgar.tools — 186K+ filings pre-parsed →](https://app.edgar.tools/companies/SNOW?utm_source=edgartools-docs&utm_medium=see-live&utm_content=insider-filings)**
+
 ---
 
 ## Get the Transaction Summary
@@ -230,6 +232,14 @@ for f in filings[:50]:
 
 df = pd.concat(rows, ignore_index=True)
 ```
+
+!!! tip "See this on edgar.tools"
+    The code above parses individual Form 4 filings. **edgar.tools** connects 186K+ insider filings and 802K+ transactions into a searchable intelligence layer with sentiment analysis.
+
+    - **[See Apple's insider trading activity →](https://app.edgar.tools/companies/AAPL?utm_source=edgartools-docs&utm_medium=see-live&utm_content=insider)**
+    - **[See Tesla's insider transactions →](https://app.edgar.tools/companies/TSLA?utm_source=edgartools-docs&utm_medium=see-live&utm_content=insider)**
+
+    Includes net buy/sell sentiment, executive profiles, and cross-filing linkages to 8-K material events. Free tier available. [Pricing →](https://app.edgar.tools/pricing?utm_source=edgartools-docs&utm_medium=see-live&utm_content=insider)
 
 ---
 

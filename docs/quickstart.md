@@ -45,6 +45,8 @@ company = Company("AAPL")  # Apple Inc.
 
 ![AAPL](images/AAPL.png)
 
+> **[See Apple's filings, financials, and insider trades on edgar.tools — no code required →](https://app.edgar.tools/companies/AAPL?utm_source=edgartools-docs&utm_medium=see-live&utm_content=quickstart)**
+
 You can access basic company data as properties:
 
 ```python
@@ -139,6 +141,15 @@ Company("AAPL")                     # Start here — look up a company
         ├── .income_statement()        #   Multi-year income data
         └── .balance_sheet()           #   Multi-year balance sheet
 ```
+
+!!! tip "See it live on edgar.tools"
+    The code above runs locally. **[edgar.tools](https://app.edgar.tools?utm_source=edgartools-docs&utm_medium=see-live&utm_content=general)** puts the same data in a web UI with AI enrichment on top — no code required.
+
+    - **[Browse Apple's filings, financials, and insider trades →](https://app.edgar.tools/companies/AAPL?utm_source=edgartools-docs&utm_medium=see-live&utm_content=general)**
+    - **[Watch filings arrive in real time →](https://app.edgar.tools/filings?utm_source=edgartools-docs&utm_medium=see-live&utm_content=general)**
+    - **[Search disclosures across 12 XBRL topics →](https://app.edgar.tools/disclosures?utm_source=edgartools-docs&utm_medium=see-live&utm_content=general)**
+
+    Also includes a REST API (20+ endpoints), hosted MCP server, and data exports. Free tier: 100 API calls/day.
 
 ## Step 8: Next Steps
 

@@ -89,6 +89,8 @@ python -m edgar.ai --test
 
 **For Claude Desktop**, add the config above to your config file (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS, `%APPDATA%\Claude\claude_desktop_config.json` on Windows) and restart. You should see the MCP tools icon in the chat input.
 
+> **[edgar.tools also runs a hosted MCP server with AI-enriched data — no local setup needed →](https://app.edgar.tools/docs/mcp/setup?utm_source=edgartools-docs&utm_medium=see-live&utm_content=ai-integration)**
+
 ### Available Tools
 
 #### edgar_company
@@ -191,6 +193,20 @@ The server works with any MCP-compatible client -- Claude Desktop, Cline, Contin
 ```
 
 Where it goes depends on the client: Claude Desktop config file, Cline MCP settings, `~/.continue/config.json`, etc.
+
+!!! info "edgar.tools also runs a hosted MCP server"
+    The local edgartools MCP server queries EDGAR directly through Python. The **[edgar.tools hosted MCP server](https://app.edgar.tools/docs/mcp/setup?utm_source=edgartools-docs&utm_medium=see-live&utm_content=ai-integration)** adds AI-enriched data processed server-side:
+
+    | Capability | Local (edgartools) | Hosted (edgar.tools) |
+    |---|---|---|
+    | Material events | Basic 8-K parsing | LLM-classified event types |
+    | Disclosure search | — | 12 XBRL topic clusters, all years |
+    | Insider data | Individual Form 4s | 802K+ transactions with sentiment |
+    | Filing sections | Raw text | AI summaries and key takeaways |
+
+    Free tier: truncated MCP responses. Professional ($24.99/mo): full results.
+
+    **[Set up the hosted MCP server →](https://app.edgar.tools/docs/mcp/setup?utm_source=edgartools-docs&utm_medium=see-live&utm_content=ai-integration)**
 
 ## Skills
 
