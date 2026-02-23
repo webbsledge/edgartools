@@ -116,7 +116,7 @@ Source = "https://github.com/dgunning/edgartools"
 Changelog = "https://github.com/dgunning/edgartools/releases"
 
 [project.scripts]
-edgartools-mcp = "edgar.ai.mcp_server:main"
+edgartools-mcp = "edgar.ai.mcp.server:main"
 edgar-test = "tests.harness.cli:cli"
 
 [tool.hatch.version]
