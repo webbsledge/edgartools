@@ -22,6 +22,8 @@ company.shares_outstanding   # 15115785000.0
 company.public_float          # 2899948348000.0
 ```
 
+> **[See Apple on edgar.tools — filings, financials, and insider trades in a web UI →](https://app.edgar.tools/companies/AAPL?utm_source=edgartools-docs&utm_medium=see-live&utm_content=index)**
+
 **Analyze Company Financials**
 
 Extract financial statements, calculate ratios, and track performance over time.
@@ -129,6 +131,15 @@ company = Company("TSLA")
 latest_10k = company.get_filings(form="10-K").latest()
 financials = latest_10k.obj().financials
 ```
+
+!!! tip "See it live on edgar.tools"
+    Everything above runs locally. **[edgar.tools](https://app.edgar.tools?utm_source=edgartools-docs&utm_medium=see-live&utm_content=general)** puts the same data in a web UI with AI enrichment on top — no code required.
+
+    - **[Browse Apple's filings, financials, and insider trades →](https://app.edgar.tools/companies/AAPL?utm_source=edgartools-docs&utm_medium=see-live&utm_content=general)**
+    - **[Watch filings arrive in real time →](https://app.edgar.tools/filings?utm_source=edgartools-docs&utm_medium=see-live&utm_content=general)**
+    - **[Search disclosures across 12 XBRL topics →](https://app.edgar.tools/disclosures?utm_source=edgartools-docs&utm_medium=see-live&utm_content=general)**
+
+    Also includes a REST API (20+ endpoints), hosted MCP server, and data exports. Free tier: 100 API calls/day.
 
 ## Popular Use Cases
 

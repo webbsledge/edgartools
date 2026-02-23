@@ -18,6 +18,8 @@ eight_k
 
 Three lines to get a parsed 8-K with company info, filing date, items disclosed, and exhibits.
 
+> **[See today's 8-K filings on edgar.tools — with AI-classified material event types →](https://app.edgar.tools/filings?utm_source=edgartools-docs&utm_medium=see-live&utm_content=eightk)**
+
 ---
 
 ## Read Item Content
@@ -198,6 +200,14 @@ if 'Item 8.01' in eight_k.items or 'Item 5.03' in eight_k.items:
     if 'split' in content.lower():
         print(f"Stock split announced: {filing.filing_date}")
 ```
+
+!!! tip "See this on edgar.tools"
+    The code above detects 8-K event types by checking item numbers manually. **edgar.tools** classifies material events automatically using LLMs — earnings, acquisitions, executive changes, and more — across every 8-K as it's filed.
+
+    - **[Watch 8-K filings arrive in real time with event classification →](https://app.edgar.tools/filings?utm_source=edgartools-docs&utm_medium=see-live&utm_content=eightk)**
+    - **[See Apple's recent material events →](https://app.edgar.tools/companies/AAPL?utm_source=edgartools-docs&utm_medium=see-live&utm_content=eightk)**
+
+    Includes AI-generated summaries, business descriptions, and cross-filing linkages. Free tier available. [Pricing →](https://app.edgar.tools/pricing?utm_source=edgartools-docs&utm_medium=see-live&utm_content=eightk)
 
 ---
 
