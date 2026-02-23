@@ -22,6 +22,8 @@ income_statement = financials.income_statement()
 
 That's it. You now have Apple's full income statement from their latest 10-K filing.
 
+> **[See Apple's financials on edgar.tools — no code required →](https://app.edgar.tools/companies/AAPL?utm_source=edgartools-docs&utm_medium=see-live&utm_content=financial-data)**
+
 ---
 
 ## Get Specific Values
@@ -342,16 +344,12 @@ print(xbrl.reporting_periods)
 
 ---
 
-[![edgar.tools](https://app.edgar.tools/images/logo-full.svg)](https://edgar.tools)
+!!! tip "See it on edgar.tools"
+    The code above extracts financials programmatically. **edgar.tools** shows the same data visually — plus Disclosure Search, which lets you browse XBRL topics across every 10-K year for a company.
 
-Want to share SEC data with colleagues who don't use Python? 
+    - **[See Apple's financials →](https://app.edgar.tools/companies/AAPL?utm_source=edgartools-docs&utm_medium=see-live&utm_content=financial-data)**
+    - **[Browse income tax disclosures across all filing years →](https://app.edgar.tools/disclosures/income-taxes?utm_source=edgartools-docs&utm_medium=see-live&utm_content=financial-data)**
+    - **[Explore all 12 XBRL disclosure topics →](https://app.edgar.tools/disclosures?utm_source=edgartools-docs&utm_medium=see-live&utm_content=financial-data)**
 
-**edgar.tools** provides the same data through a visual interface:
-
-- **No code required** — Browse filings, view financials, search companies
-- **Share with your team** — Analysts and executives can access data directly
-- **REST API** — For JavaScript, mobile apps, or other non-Python integrations
-- **MCP server** — Query SEC data through Claude and other AI assistants
-
-[Try edgar.tools →](https://edgar.tools)
+    Export to Excel, PDF, or CSV with one click. Free tier available. [Pricing →](https://app.edgar.tools/pricing?utm_source=edgartools-docs&utm_medium=see-live&utm_content=financial-data)
 
