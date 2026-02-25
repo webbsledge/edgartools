@@ -560,6 +560,92 @@ class XBRL:
             self._fund_statements = FundStatements(self)
         return self._fund_statements
 
+    def notes(self) -> List:
+        """
+        Get all note sections from the XBRL filing.
+
+        Returns:
+            List of Statement objects for notes
+
+        Example:
+            >>> xbrl = filing.xbrl()
+            >>> for note in xbrl.notes():
+            ...     print(note.title)
+        """
+        return self.statements.notes()
+
+    def disclosures(self) -> List:
+        """
+        Get all disclosure sections from the XBRL filing.
+
+        Returns:
+            List of Statement objects for disclosures
+
+        Example:
+            >>> xbrl = filing.xbrl()
+            >>> for disc in xbrl.disclosures():
+            ...     print(disc.title)
+        """
+        return self.statements.disclosures()
+
+    def list_tables(self) -> Dict[str, List]:
+        """
+        List all tables in the XBRL filing, organized by category.
+
+        Returns a dict with keys: 'statement', 'note', 'disclosure', 'document', 'other'.
+        Each value is a list of statement dicts with 'index', 'definition', 'role_name', etc.
+
+        Example:
+            >>> xbrl = filing.xbrl()
+            >>> tables = xbrl.list_tables()
+            >>> for note in tables['note']:
+            ...     print(note['definition'])
+        """
+        return self.statements.get_statements_by_category()
+
+    def get_table(self, name: str) -> Optional[Any]:
+        """
+        Get a table (statement, note, or disclosure) by name with smart resolution.
+
+        Searches in order: exact type match, role_name contains, definition contains.
+        Works for any table in the filing — financial statements, notes, or disclosures.
+
+        Args:
+            name: Table name to search for (e.g. 'IncomeStatement', 'debt', 'revenue recognition')
+
+        Returns:
+            Statement if found, None otherwise
+
+        Example:
+            >>> xbrl = filing.xbrl()
+            >>> debt_note = xbrl.get_table("debt")
+            >>> revenue = xbrl.get_table("revenue recognition")
+        """
+        return self.statements.get(name)
+
+    def get_disclosure(self, role_uri: str) -> Optional[Any]:
+        """
+        Get a disclosure or note by its exact role URI.
+
+        For advanced users who know the specific XBRL role URI.
+
+        Args:
+            role_uri: Full role URI (e.g. 'http://company.com/role/DebtDisclosure')
+
+        Returns:
+            Statement if the role exists, None otherwise
+
+        Example:
+            >>> xbrl = filing.xbrl()
+            >>> tables = xbrl.list_tables()
+            >>> role = tables['disclosure'][0]['role']
+            >>> stmt = xbrl.get_disclosure(role)
+        """
+        from edgar.xbrl.statements import Statement
+        if role_uri in self.presentation_trees:
+            return Statement(self, role_uri)
+        return None
+
     @property
     def facts(self):
         from edgar.xbrl.facts import FactsView
