@@ -1907,6 +1907,22 @@ class Filing:
         """Alias for data_object()"""
         return self.data_object()
 
+    @property
+    def obj_type(self) -> Optional[str]:
+        """
+        The class name that .obj() would return for this filing, or None if unsupported.
+
+        Example::
+
+            >>> filing.obj_type
+            'TenK'
+            >>> filing.obj_type is None  # unsupported form
+            True
+        """
+        from edgar import get_obj_info
+        has_obj, obj_type_name, _ = get_obj_info(self.form)
+        return obj_type_name if has_obj else None
+
     def open_homepage(self):
         """Open the homepage in the browser"""
         webbrowser.open(self.homepage_url)
