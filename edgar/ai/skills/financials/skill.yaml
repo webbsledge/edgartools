@@ -52,7 +52,7 @@ patterns:
       income = financials.income_statement()                    # standard
       income = financials.income_statement(view="detailed")     # all line items
       balance = financials.balance_sheet(view="summary")        # key totals only
-      cashflow = financials.cashflow_statement()
+      cashflow = financials.cashflow_statement()   # or cash_flow_statement()
 
       # view also works on multi-period stitched statements (MultiFinancials / XBRLS)
       from edgar import MultiFinancials

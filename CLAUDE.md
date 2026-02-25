@@ -27,6 +27,8 @@ from edgar import Filing, Filings, Company, find, obj
 ```
 
 - `Company("AAPL")` - Get company by ticker or CIK
+- `company.get_financials()` - Financial statements from latest 10-K (recommended)
+- `company.get_quarterly_financials()` - Financial statements from latest 10-Q
 - `find(form="10-K", ticker="AAPL")` - Search filings
 - `filing.xbrl()` - Parse XBRL financials
 - `filing.obj()` - Get typed report object (TenK, TenQ, etc.)
@@ -34,6 +36,7 @@ from edgar import Filing, Filings, Company, find, obj
 ## Data Flow
 
 ```
+Company → company.get_financials() → Financials → income/balance/cashflow
 Filing → filing.obj() → TenK/TenQ/EightK
 Filing → filing.xbrl() → XBRL → statements
 Company → company.get_facts() → EntityFacts → Statement

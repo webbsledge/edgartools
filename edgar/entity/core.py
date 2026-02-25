@@ -609,14 +609,45 @@ class Company(Entity):
         return []
 
     def get_financials(self) -> Optional[Financials]:
-        """Get financial statements for this company."""
+        """
+        Get financial statements from this company's latest 10-K annual report.
+
+        This is the recommended starting point for financial analysis. Returns a
+        Financials object with access to income statement, balance sheet, and
+        cash flow statement — typically covering 3 years of data.
+
+        Returns:
+            Financials object, or None if no 10-K filing is available
+
+        Example::
+
+            financials = Company("AAPL").get_financials()
+            financials.income_statement()
+            financials.balance_sheet()
+            financials.cashflow_statement()
+            financials.get_revenue()        # Quick access to a single value
+        """
         tenk_filing = self.latest_tenk
         if tenk_filing is not None:
             return tenk_filing.financials
         return None
 
     def get_quarterly_financials(self) -> Optional[Financials]:
-        """Get quarterly financial statements for this company."""
+        """
+        Get financial statements from this company's latest 10-Q quarterly report.
+
+        Returns a Financials object with the same interface as get_financials(),
+        but with quarterly data instead of annual.
+
+        Returns:
+            Financials object, or None if no 10-Q filing is available
+
+        Example::
+
+            quarterly = Company("AAPL").get_quarterly_financials()
+            quarterly.income_statement()
+            quarterly.balance_sheet()
+        """
         tenq_filing = self.latest_tenq
         if tenq_filing is not None:
             return tenq_filing.financials

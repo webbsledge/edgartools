@@ -73,7 +73,8 @@ cashflow  = financials.cashflow_statement()
 That's it — three lines to get any company's income statement, balance sheet, or cash flow.
 
 !!! note "Common gotcha"
-    The method is `cashflow_statement()`, not `cash_flow()`. All three methods use the full name: `income_statement()`, `balance_sheet()`, `cashflow_statement()`.
+    The canonical method is `cashflow_statement()`, but `cash_flow_statement()` also works.
+    All three statements: `income_statement()`, `balance_sheet()`, `cashflow_statement()`.
 
 ## Step 5: Get Specific Values
 
@@ -124,22 +125,25 @@ tenk = company.latest("10-K")
 Here's a map of the main objects. Use it as a reference when you want to try something new:
 
 ```
-Company("AAPL")                     # Start here — look up a company
-  ├── .get_financials()                # Financial data (RECOMMENDED for most tasks)
-  │     ├── .income_statement()        #   Revenue, expenses, profit
-  │     ├── .balance_sheet()           #   Assets, liabilities, equity
-  │     ├── .cashflow_statement()      #   Cash in and out
-  │     ├── .get_revenue()             #   Quick: just the revenue number
-  │     └── .get_net_income()          #   Quick: just net income
+Company("AAPL")                        # Start here — look up a company
+  ├── .get_financials()                  # Annual financials from 10-K (RECOMMENDED)
+  │     ├── .income_statement()          #   Revenue, expenses, profit
+  │     ├── .balance_sheet()             #   Assets, liabilities, equity
+  │     ├── .cashflow_statement()        #   Cash in and out
+  │     ├── .get_revenue()               #   Quick: just the revenue number
+  │     └── .get_net_income()            #   Quick: just net income
   │
-  ├── .get_filings(form="10-K")        # Browse SEC filings
-  │     ├── .head(5)                   #   See the first 5
-  │     ├── .latest()                  #   Get the most recent one
-  │     └── [0].obj()                  #   Parse into a data object (TenK, etc.)
+  ├── .get_quarterly_financials()        # Quarterly financials from 10-Q
+  │     └── (same interface as above)
   │
-  └── .get_facts()                     # Historical data (for 4+ years of trends)
-        ├── .income_statement()        #   Multi-year income data
-        └── .balance_sheet()           #   Multi-year balance sheet
+  ├── .get_filings(form="10-K")          # Browse SEC filings
+  │     ├── .head(5)                     #   See the first 5
+  │     ├── .latest()                    #   Get the most recent one
+  │     └── [0].obj()                    #   Parse into a data object (TenK, etc.)
+  │
+  └── .get_facts()                       # Historical data (for 4+ years of trends)
+        ├── .income_statement()          #   Multi-year income data
+        └── .balance_sheet()             #   Multi-year balance sheet
 ```
 
 !!! tip "See it live on edgar.tools"

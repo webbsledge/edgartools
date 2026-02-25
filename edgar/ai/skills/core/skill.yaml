@@ -82,7 +82,8 @@ patterns:
     when: User asks about revenue, balance sheet, cash flow, metrics
     code: |
       # PREFERRED: get_financials() for up to 3 years of data
-      financials = company.get_financials()
+      financials = company.get_financials()              # Annual (from latest 10-K)
+      quarterly = company.get_quarterly_financials()     # Quarterly (from latest 10-Q)
       revenue = financials.get_revenue()                 # Current revenue
       net_income = financials.get_net_income()           # Current net income
       margin = net_income / revenue                      # Example calculation
