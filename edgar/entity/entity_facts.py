@@ -537,6 +537,10 @@ class EntityFacts:
 
         Returns:
             The most recent matching fact, or None if not found
+
+        Tip:
+            Use ``search_concepts()`` to find concept names and
+            ``available_periods()`` to find period keys.
         """
         # Try exact concept match first
         facts = self._fact_index['by_concept'].get(concept, [])
@@ -1073,6 +1077,125 @@ class EntityFacts:
                     break
 
         return found_tags
+
+    def search_concepts(self, pattern: str) -> 'ConceptSearchResults':
+        """
+        Search this company's facts for concepts matching a pattern.
+
+        Performs a case-insensitive regex search against concept names and labels.
+        Useful for discovering what data a company actually reports before querying.
+
+        Args:
+            pattern: Regex pattern to match (e.g. "revenue", "asset", "cash.*flow")
+
+        Returns:
+            ConceptSearchResults with Rich display and to_dataframe()
+
+        Example:
+            >>> facts = company.get_facts()
+            >>> facts.search_concepts("revenue")
+            # Shows table: Concept | Label | Facts | Years | Periods
+        """
+        import re
+        from edgar.entity.models import ConceptMatch, ConceptSearchResults
+
+        regex = re.compile(pattern, re.IGNORECASE)
+
+        # Single pass: build per-concept aggregates
+        concept_info: Dict[str, dict] = {}
+        for fact in self._facts:
+            key = fact.concept
+            if key not in concept_info:
+                concept_info[key] = {
+                    'label': fact.label or '',
+                    'count': 0,
+                    'years': set(),
+                    'periods': set(),
+                    'units': set(),
+                }
+            info = concept_info[key]
+            info['count'] += 1
+            if fact.fiscal_year:
+                info['years'].add(fact.fiscal_year)
+            if fact.fiscal_period:
+                info['periods'].add(fact.fiscal_period)
+            if fact.unit:
+                info['units'].add(fact.unit)
+
+        # Filter by regex on concept name and label
+        matches = []
+        for concept, info in concept_info.items():
+            if regex.search(concept) or regex.search(info['label']):
+                matches.append(ConceptMatch(
+                    concept=concept,
+                    label=info['label'],
+                    fact_count=info['count'],
+                    fiscal_years=sorted(info['years']),
+                    periods=sorted(info['periods']),
+                    units=sorted(info['units']),
+                ))
+
+        # Sort by fact_count descending
+        matches.sort(key=lambda m: m.fact_count, reverse=True)
+
+        return ConceptSearchResults(matches, pattern)
+
+    def available_periods(self, concept: str = None) -> 'PeriodSummary':
+        """
+        List periods that have data, optionally filtered to a specific concept.
+
+        Args:
+            concept: Optional concept name or label to filter by.
+                     If None, shows periods across all facts.
+
+        Returns:
+            PeriodSummary with Rich display and to_dataframe()
+
+        Example:
+            >>> facts = company.get_facts()
+            >>> facts.available_periods()           # all periods
+            >>> facts.available_periods("Revenue")  # periods with Revenue data
+        """
+        from collections import defaultdict
+        from edgar.entity.models import PeriodEntry, PeriodSummary
+
+        # Determine which facts to scan
+        if concept:
+            facts_to_scan = self._fact_index['by_concept'].get(concept, [])
+            if not facts_to_scan:
+                facts_to_scan = self._fact_index['by_concept'].get(concept.lower(), [])
+        else:
+            facts_to_scan = self._facts
+
+        # Group by period key
+        period_data: Dict[str, dict] = defaultdict(lambda: {
+            'year': 0, 'period': '', 'count': 0, 'concepts': set()
+        })
+        for fact in facts_to_scan:
+            key = f"{fact.fiscal_year}-{fact.fiscal_period}"
+            info = period_data[key]
+            info['year'] = fact.fiscal_year
+            info['period'] = fact.fiscal_period
+            info['count'] += 1
+            info['concepts'].add(fact.concept)
+
+        # Sort: year descending, then FY > Q4 > Q3 > Q2 > Q1
+        period_order = {'FY': 0, 'Q4': 1, 'Q3': 2, 'Q2': 3, 'Q1': 4}
+
+        entries = [
+            PeriodEntry(
+                period_key=key,
+                fiscal_year=info['year'],
+                fiscal_period=info['period'],
+                fact_count=info['count'],
+                concept_count=len(info['concepts']),
+            )
+            for key, info in period_data.items()
+            if info['year']  # skip entries with no fiscal year
+        ]
+        entries.sort(key=lambda e: (-e.fiscal_year, period_order.get(e.fiscal_period, 9)))
+
+        return PeriodSummary(entries)
 
     def list_supported_concepts(self, category: Optional[str] = None) -> List[str]:
         """
