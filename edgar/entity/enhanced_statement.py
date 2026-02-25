@@ -31,6 +31,7 @@ from edgar.entity.mappings_loader import (
     load_virtual_trees,
 )
 from edgar.entity.models import FinancialFact
+from edgar.entity.utils import normalize_period_to_statement
 
 from edgar.display import get_statement_styles, SYMBOLS, get_style
 from edgar.richtools import repr_rich
@@ -907,6 +908,8 @@ class MultiPeriodStatement:
                 if item['change_percent']:
                     print(f"{item['label']}: {item['change_percent']:.1%} change")
         """
+        period1 = normalize_period_to_statement(period1)  # accept "2023-FY" too
+        period2 = normalize_period_to_statement(period2)
         if period1 not in self.periods or period2 not in self.periods:
             raise ValueError(f"Periods must be in {self.periods}")
 
@@ -1117,6 +1120,7 @@ class MultiPeriodItem:
         Returns:
             Formatted value string
         """
+        period = normalize_period_to_statement(period)  # accept "2023-FY" too
         value = self.values.get(period)
 
         if value is not None:

@@ -32,6 +32,7 @@ from rich.text import Text
 from edgar.core import log
 from edgar.entity.enhanced_statement import MultiPeriodStatement
 from edgar.entity.models import FinancialFact
+from edgar.entity.utils import normalize_period_to_entity_facts
 from edgar.httprequests import download_json
 from edgar.storage import get_edgar_data_directory, is_using_local_storage
 
@@ -571,6 +572,7 @@ class EntityFacts:
 
         # Filter by period if specified
         if period:
+            period = normalize_period_to_entity_facts(period)  # accept "FY 2023" too
             all_facts = facts
             facts = [f for f in facts if f"{f.fiscal_year}-{f.fiscal_period}" == period]
 
