@@ -363,6 +363,39 @@ class Financials:
         ]
         return self._get_standardized_concept_value('income', patterns, period_offset)
 
+    def get_operating_income(self, period_offset: int = 0) -> Optional[Union[int, float]]:
+        """
+        Get operating income from the income statement using standardized XBRL concepts.
+
+        Args:
+            period_offset: Which period to get (0=most recent, 1=previous, etc.)
+
+        Returns:
+            Operating income value if found, None otherwise
+
+        Example:
+            >>> company = Company('AAPL')
+            >>> financials = company.get_financials()
+            >>> operating_income = financials.get_operating_income()
+        """
+        # First try concept-based search using standardization mappings
+        result = self._get_standardized_concept_by_xbrl(
+            'income',
+            ['Operating Income'],
+            period_offset
+        )
+        if result is not None:
+            return result
+
+        # Fallback to label-based search for edge cases
+        patterns = [
+            r'Operating Income$',
+            r'^Operating Income',
+            r'Income.*Operations',
+            r'Operating.*Income.*Loss',
+        ]
+        return self._get_standardized_concept_value('income', patterns, period_offset)
+
     def get_total_assets(self, period_offset: int = 0) -> Optional[Union[int, float]]:
         """
         Get total assets from the balance sheet using standardized labels.
@@ -663,6 +696,7 @@ class Financials:
 
         # Income Statement Metrics
         metrics['revenue'] = self.get_revenue()
+        metrics['operating_income'] = self.get_operating_income()
         metrics['net_income'] = self.get_net_income()
 
         # Balance Sheet Metrics  
@@ -761,6 +795,7 @@ class Financials:
             "",
             "QUICK METRICS (returns value or None):",
             "  financials.get_revenue()",
+            "  financials.get_operating_income()",
             "  financials.get_net_income()",
             "  financials.get_total_assets()",
             "  financials.get_stockholders_equity()",
