@@ -81,6 +81,10 @@ class Financials:
             return None
         return self.xb.statements.cashflow_statement(include_dimensions=include_dimensions, view=view)
 
+    def cash_flow_statement(self, **kwargs):
+        """Alias for cashflow_statement()."""
+        return self.cashflow_statement(**kwargs)
+
     def statement_of_equity(self, include_dimensions: bool = None, view: ViewType = None):
         """
         Get the statement of equity.
@@ -837,6 +841,10 @@ class MultiFinancials:
 
     def cashflow_statement(self, view: ViewType = None) -> Optional[StitchedStatement]:
         return self.xbs.statements.cashflow_statement(view=view)
+
+    def cash_flow_statement(self, **kwargs):
+        """Alias for cashflow_statement()."""
+        return self.cashflow_statement(**kwargs)
 
     def __rich__(self):
         return self.xbs.__rich__()

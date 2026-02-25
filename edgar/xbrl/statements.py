@@ -2344,6 +2344,10 @@ class Statements:
         except Exception as e:
             return self._handle_statement_error(e, "CashFlowStatement")
 
+    def cash_flow_statement(self, **kwargs):
+        """Alias for cashflow_statement()."""
+        return self.cashflow_statement(**kwargs)
+
     def statement_of_equity(self, parenthetical: bool = False,
                             view: ViewType = None,
                             include_dimensions: Optional[bool] = None) -> Optional[Statement]:
@@ -2824,6 +2828,10 @@ class StitchedStatements:
         if show_date_range:
             statement.show_date_range = show_date_range
         return statement
+
+    def cash_flow_statement(self, **kwargs):
+        """Alias for cashflow_statement()."""
+        return self.cashflow_statement(**kwargs)
 
     def statement_of_equity(self, max_periods: int = 8, standard: bool = True,
                             use_optimal_periods: bool = True, show_date_range: bool = False,

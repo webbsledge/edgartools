@@ -1069,6 +1069,10 @@ class Company(Entity):
             as_dataframe=as_dataframe, concise_format=concise_format
         )
 
+    def cash_flow_statement(self, **kwargs):
+        """Alias for cashflow_statement()."""
+        return self.cashflow_statement(**kwargs)
+
     # -------------------------------------------------------------------------
     # Concept Discovery Methods
     # -------------------------------------------------------------------------
