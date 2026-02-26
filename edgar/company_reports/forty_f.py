@@ -507,6 +507,64 @@ class FortyF(CompanyReport):
 
         return None
 
+    # -- LLM context ---------------------------------------------------------
+
+    def to_context(self, detail: str = 'standard') -> str:
+        """Return LLM-optimized context describing this 40-F filing.
+
+        Args:
+            detail: 'minimal', 'standard', or 'full'
+
+        Returns:
+            Markdown-KV string for LLM consumption
+        """
+        lines = [
+            f"REPORT: {self.company} Form {self.form}",
+            f"Period: {self.period_of_report}",
+            f"Filed: {self.filing_date}",
+        ]
+
+        aif_status = "found" if self.aif_attachment else "not found"
+        lines.append(f"AIF: {aif_status}")
+
+        if detail in ('standard', 'full'):
+            items = self.items
+            if items:
+                lines.append(f"Detected Sections ({len(items)}): {', '.join(items)}")
+            else:
+                lines.append("Detected Sections: none")
+
+            lines.append("")
+            lines.append("AVAILABLE PROPERTIES:")
+            lines.append("  .business                  # Business description from AIF")
+            lines.append("  .risk_factors              # Risk factors")
+            lines.append("  .corporate_structure       # Corporate structure")
+            lines.append("  .dividends                 # Dividends")
+            lines.append("  .capital_structure         # Capital structure")
+            lines.append("  .directors_and_officers    # Directors and officers")
+            lines.append("  .legal_proceedings         # Legal proceedings")
+            lines.append("  .financials                # XBRL financials")
+            lines.append("  .income_statement          # Income statement")
+            lines.append("  .balance_sheet             # Balance sheet")
+            lines.append("  .aif_text                  # Full AIF plain text for LLM input")
+            lines.append("  .aif_html                  # Raw AIF HTML")
+            lines.append("")
+            lines.append("SECTION LOOKUP:")
+            lines.append("  forty_f['Risk Factors']    # Exact match")
+            lines.append("  forty_f['business']        # Fuzzy keyword match")
+            lines.append("  forty_f.items              # List detected sections")
+
+        if detail == 'full' and self.items:
+            lines.append("")
+            lines.append("SECTION PREVIEWS:")
+            for name in self.items:
+                text = self[name]
+                if text:
+                    preview = text[:150].replace('\n', ' ')
+                    lines.append(f"  {name}: {preview}...")
+
+        return "\n".join(lines)
+
     # -- Display -------------------------------------------------------------
 
     def __str__(self):

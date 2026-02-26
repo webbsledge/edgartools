@@ -209,6 +209,33 @@ class TestDisplay:
 
 
 # ---------------------------------------------------------------------------
+# LLM context
+# ---------------------------------------------------------------------------
+
+class TestToContext:
+
+    @pytest.mark.network
+    def test_to_context_minimal(self, shop_forty_f):
+        ctx = shop_forty_f.to_context('minimal')
+        assert 'SHOPIFY' in ctx
+        assert '40-F' in ctx
+        assert 'AIF: found' in ctx
+
+    @pytest.mark.network
+    def test_to_context_standard_lists_properties(self, shop_forty_f):
+        ctx = shop_forty_f.to_context()
+        assert '.risk_factors' in ctx
+        assert '.aif_text' in ctx
+        assert 'Detected Sections' in ctx
+
+    @pytest.mark.network
+    def test_to_context_full_has_previews(self, shop_forty_f):
+        ctx = shop_forty_f.to_context('full')
+        assert 'SECTION PREVIEWS' in ctx
+        assert 'Corporate Structure' in ctx
+
+
+# ---------------------------------------------------------------------------
 # Financials (from base class)
 # ---------------------------------------------------------------------------
 
