@@ -7,6 +7,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.18.0] - 2026-02-26
+
+### Added
+
+- **FortyF Data Object (40-F Canadian MJDS)** — New data object for Form 40-F annual reports filed by ~200 Canadian cross-listed companies (Shopify, Royal Bank, Barrick Gold, etc.). Unlike 10-K filings, the 40-F wrapper is an iXBRL shell — the actual business content lives in the Annual Information Form (AIF) exhibit. FortyF identifies the AIF via a 5-tier priority chain and extracts NI 51-102 sections with regex-based detection and three-layer disambiguation (TOC entries, cross-references, page footers). Validated across 24 Canadian filers with 92% business extraction and 100% items detection.
+  - Named section properties: `.business`, `.risk_factors`, `.corporate_structure`, `.dividends`, `.capital_structure`, `.directors_and_officers`, `.legal_proceedings`
+  - Fuzzy section lookup: `forty_f["business"]` matches "Description Of The Business"
+  - Raw document access: `.aif_html`, `.aif_text` for downstream rendering and LLM input
+  - MD&A exhibit discovery: `.mda_attachment`, `.mda_html`, `.mda_text` for filers that include a separate MD&A (e.g. Manulife)
+  - Rich display with NI 51-102 section tree and `to_context()` for LLM agents
+  - **Files**: `edgar/company_reports/forty_f.py`
+
+- **EntityFacts Discovery Methods** — New `search_concepts()` and `available_periods()` methods on EntityFacts let users explore what concepts and periods a company actually has before querying, instead of guessing names and getting silent None returns ([20ba29d](https://github.com/dgunning/edgartools/commit/20ba29d))
+
+- **Helpful Warnings on Silent None Returns** — `get_fact()`, `get_annual_fact()`, and `get_concept()` now emit `UserWarning` with fuzzy "did you mean?" suggestions via `difflib` and tips pointing to `search_concepts()` / `available_periods()` when they return None ([2837d4e](https://github.com/dgunning/edgartools/commit/2837d4e))
+
+- **XBRL Notes/Disclosures Access** — Five new convenience methods on the XBRL object (`.notes`, `.disclosures`, `.list_tables()`, `.get_table()`, `.get_disclosure()`) so users can discover and access all XBRL tables directly without navigating through Statements first ([7006bc9](https://github.com/dgunning/edgartools/commit/7006bc9))
+
+- **`Filing.obj_type` Property** — Preview what `.obj()` will return (e.g. `'TenK'`, `'Form4'`) without parsing the filing. Returns None for unsupported form types ([618519b](https://github.com/dgunning/edgartools/commit/618519b))
+
+- **`get_operating_income()` on Financials** — XBRL concept-first lookup with label fallback, matching the `get_revenue()` pattern ([#663](https://github.com/dgunning/edgartools/issues/663))
+
+- **`cash_flow_statement()` Alias** — Added `cash_flow_statement()` as an alias for `cashflow_statement()` on all surfaces (Company, Financials, XBRL) for discoverability ([b8558eb](https://github.com/dgunning/edgartools/commit/b8558eb))
+
+- **Period Format Normalization** — Either `"2023-FY"` or `"FY 2023"` now works everywhere. EntityFacts and MultiPeriodStatement used different formats, causing silent failures when passing periods between APIs. Both formats are now accepted transparently at API boundaries ([f33d02a](https://github.com/dgunning/edgartools/commit/f33d02a))
+
+### Fixed
+
+- **8-K Parenthesized Negative Values** — Fixed negative sign loss when 8-K earnings tables render values like `$(0.09)` as separate `<td>` cells for `$`, `(`, `0.09`, `)`. The parentheses are now reassembled correctly ([26902468](https://github.com/dgunning/edgartools/commit/26902468))
+
+## [5.17.1] - 2026-02-25
+
+### Fixed
+
+- **MCP outputSchema mismatch** — All MCP tool calls were failing because tools advertised `outputSchema` in their definitions but returned `TextContent` (text), causing clients to reject every response. Tools no longer advertise structured output when they return text ([#662](https://github.com/dgunning/edgartools/issues/662))
+
+- **MTD balance sheet resolution** — Essential-concept validation now applies across all cascade steps in `find_statement()`, not just `_match_by_standard_name`. Prevents mislabeled roles (e.g. MTD's StatementOfFinancialPositionClassified containing only Schedule II) from being re-discovered by later matching strategies ([#659](https://github.com/dgunning/edgartools/issues/659))
+
+## [5.17.0] - 2026-02-24
+
+### Added
+
+- **MCP Tool Expansion** — Major expansion of the MCP tool suite from 5 to 10 tools:
+  - `edgar_monitor`: real-time SEC filings feed via `get_current_filings()`
+  - `edgar_trends`: XBRL-sourced financial time series with YoY growth and CAGR
+  - `edgar_screen`: company discovery by industry/SIC, exchange, and state using local reference data (zero API calls)
+  - `edgar_text_search`: SEC EFTS full-text search with query, form type, company, and date range filters
+  - `portfolio_diff` analysis type on `edgar_ownership` for quarter-over-quarter 13F holdings changes
+  - 4 analysis prompts: `due_diligence`, `earnings_analysis`, `industry_overview`, `insider_monitor`
+  - All tools now declare `outputSchema` describing the shared `ToolResponse` envelope
+
+- **`search_filings()` Library API** — Full-text search extracted from MCP into a proper library function at `edgar.search.efts`. Rich display, iteration, indexing, and `.get_filing()` on results. Exported from top-level: `from edgar import search_filings`
+
+- **MCP Filing Support for 20-F/6-K** — Section maps for foreign private issuer filings, enabling extraction of business, risk_factors, MD&A, financials, directors, shareholders, and controls sections. Includes IFRS concept-to-statement-type fallback mappings for ~200 standard IFRS concepts ([#660](https://github.com/dgunning/edgartools/issues/660), contributor: [@mscilipoti](https://github.com/mscilipoti))
+
+- **`view` Parameter for Stitched Statements** — `StitchedStatement` and `MultiFinancials` accept `view='detailed'` to surface dimensional breakdowns (e.g. ERIE cost of operations sub-line items)
+
+- **MCP `edgar_compare` Metrics Filtering** — `edgar_compare` now extracts specific values (revenue, assets, margins) via EntityFacts getters with derived metrics (margins, YoY growth) instead of dumping raw statements
+
+- **MCP `edgar_company` Enriched Profile** — Profile now includes exchanges, industry, SIC description, business category, filer status, SRC/EGC flags, foreign filer info, shares outstanding, and public float
+
+### Fixed
+
+- **STZ income statement resolution** — Fixed ComprehensiveIncome fallback being incorrectly filtered when the P&L-containing statement is a ComprehensiveIncome candidate. Now validates directly against IncomeStatement criteria ([#659](https://github.com/dgunning/edgartools/issues/659))
+
+- **DIS cash flow stitching** — Fixed stitching failure when companies switch between aggregate and continuing-operations cash flow concepts across filing years. Added standard concept mappings for equivalent rows and fixed period_type variable shadowing ([#646](https://github.com/dgunning/edgartools/issues/646))
+
+- **RenderedStatement serialization** — Replaced unpicklable closures (`format_func`, lambda) with picklable callable classes (`CellFormatter`, `PreformattedValue`), and handle `ElementCatalog` objects in `to_dict()` so `json.dumps()` succeeds when dimension metadata is present
+
+- **MCP `edgar_ownership`** — Removed broken `institutions` analysis type that returned a hardcoded apology message
+
+- **MCP entry point** — Fixed package entry point for MCP server
+
 ## [5.16.3] - 2026-02-21
 
 ### Added
