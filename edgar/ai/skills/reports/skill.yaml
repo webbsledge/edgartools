@@ -4,7 +4,7 @@ version: "1.1"
 
 # See also: sharp-edges.yaml for production gotchas
 
-identity: Report section analyst. Extract items from 10-K, 10-Q, 8-K using report.items or convenience properties.
+identity: Report section analyst. Extract items from 10-K, 10-Q, 8-K, 20-F, 40-F using report.items or convenience properties.
 
 patterns:
   - name: Get Report Object
@@ -13,6 +13,7 @@ patterns:
       tenk = company.get_filings(form="10-K")[0].obj()   # TenK object
       tenq = company.get_filings(form="10-Q")[0].obj()   # TenQ object
       eightk = company.get_filings(form="8-K")[0].obj()  # EightK object
+      forty_f = company.get_filings(form="40-F")[0].obj() # FortyF (Canadian MJDS)
 
   - name: 10-K Sections
     when: Extract annual report sections
@@ -35,6 +36,41 @@ patterns:
       tenq['Item 2']                    # MD&A
       tenq['Item 3']                    # Market risk disclosures
       tenq.items                        # List available items
+
+  - name: 40-F Sections (Canadian MJDS)
+    when: Extract sections from Canadian annual reports (Shopify, Royal Bank, etc.)
+    code: |
+      forty_f = company.get_filings(form="40-F")[0].obj()  # FortyF object
+
+      # Convenience properties (NI 51-102 AIF sections)
+      forty_f.business                    # Business description from AIF
+      forty_f.risk_factors                # Risk factors
+      forty_f.corporate_structure         # Corporate structure
+      forty_f.dividends                   # Dividends
+      forty_f.capital_structure           # Capital structure (if present)
+      forty_f.directors_and_officers      # Directors and officers
+      forty_f.legal_proceedings           # Legal proceedings
+
+      # Fuzzy lookup by keyword
+      forty_f["business"]                 # Matches "Description Of The Business"
+      forty_f["dividends"]               # Case-insensitive
+
+      # Full AIF text for LLM context
+      forty_f.aif_text                    # Plain text (100K+ chars)
+      forty_f.aif_html                    # Raw HTML
+
+      # List detected sections
+      forty_f.items                       # ['Corporate Structure', 'Risk Factors', ...]
+
+      # Financials (XBRL, same as 10-K)
+      forty_f.financials                  # Financials object
+      forty_f.income_statement            # Income statement
+      forty_f.balance_sheet               # Balance sheet
+    note: |
+      40-F uses NI 51-102 AIF section headings, NOT US "Item 1", "Item 2" numbers.
+      Sections are detected by regex; not all sections appear in every filing.
+      Properties return None when a section is absent (e.g. capital_structure for SHOP).
+      Use fuzzy keyword lookup: forty_f["business"] matches any heading containing "business".
 
   - name: 8-K Events
     when: Extract current report events

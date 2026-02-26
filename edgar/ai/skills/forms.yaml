@@ -26,6 +26,7 @@ mappings:
 
   foreign:
     "foreign annual": "20-F"
+    "canadian annual|mjds": "40-F"
     "foreign current": "6-K"
 
 gotchas:

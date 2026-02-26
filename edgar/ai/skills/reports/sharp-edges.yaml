@@ -40,6 +40,30 @@ sharp_edges:
       plain = item.text                     # Plain text
       # For tabular data, use financials skill (XBRL structured)
 
+  - id: forty-f-not-item-numbers
+    summary: 40-F uses NI 51-102 section names, not US Item numbers
+    severity: high
+    solution: |
+      # WRONG: forty_f['Item 1'] → None (40-F has no US Item numbers)
+      # RIGHT: Use section names or convenience properties
+      forty_f.risk_factors                   # Convenience property
+      forty_f['Risk Factors']                # Exact name
+      forty_f['business']                    # Fuzzy keyword match
+
+      # Check what sections exist
+      print(forty_f.items)  # ['Corporate Structure', 'Risk Factors', ...]
+
+  - id: forty-f-sections-may-be-absent
+    summary: Not all NI 51-102 sections appear in every 40-F filing
+    severity: medium
+    solution: |
+      # Some sections vary by company — always check for None
+      cap = forty_f.capital_structure
+      if cap:
+          print(cap[:500])
+      else:
+          print("No capital structure section in this AIF")
+
   - id: eightk-items-different
     summary: 8-K items indicate events, detail often in exhibits
     severity: low
