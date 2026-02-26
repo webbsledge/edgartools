@@ -1259,7 +1259,7 @@ def _extract_header_columns(table_node) -> List[_CleanColumn]:
 def _is_numeric_or_currency(s: str) -> bool:
     """Check if string is a number or currency symbol."""
     s = s.strip()
-    if s in ('$', '—', '-', '–', '%'):
+    if s in ('$', '—', '-', '–', '%', '(', ')'):
         return True
     cleaned = s.replace(',', '').replace('$', '').replace('(', '').replace(')', '').replace('%', '').replace('*', '')
     if not cleaned:
@@ -1273,17 +1273,20 @@ def _is_numeric_or_currency(s: str) -> bool:
 
 def _merge_currency_symbols(cells: List[str]) -> List[str]:
     """
-    Merge standalone currency symbols with following number.
+    Merge standalone currency symbols and parentheses with adjacent numbers.
 
     Handles:
     - ['$', '100'] -> ['$100']
     - ['$', '$', '100'] -> ['$', '$100'] (consecutive $ handled)
     - ['100', '$'] -> ['100', '$'] (trailing $ kept as-is)
+    - ['(', '0.09', ')'] -> ['(0.09)']
+    - ['$', '(', '0.09', ')'] -> ['$(0.09)']
     """
     if not cells:
         return []
 
-    result = []
+    # Pass 1: merge currency symbols with following cell
+    merged = []
     i = 0
     while i < len(cells):
         cell = cells[i].strip()
@@ -1292,11 +1295,33 @@ def _merge_currency_symbols(cells: List[str]) -> List[str]:
             next_cell = cells[i + 1].strip()
             # Only merge if next cell is not also a currency symbol
             if next_cell and next_cell not in ('$', '€', '£', '¥'):
-                result.append(f"{cell}{next_cell}")
+                merged.append(f"{cell}{next_cell}")
                 i += 2
                 continue
-        result.append(cell)
+        merged.append(cell)
         i += 1
+
+    # Pass 2: merge parentheses with adjacent numbers
+    # e.g. ['(', '0.09', ')'] -> ['(0.09)']
+    # e.g. ['$(', '0.09', ')'] -> ['$(0.09)']
+    result = []
+    i = 0
+    while i < len(merged):
+        cell = merged[i].strip()
+        # Check for opening paren (standalone or trailing on currency like '$(')
+        if cell.endswith('(') and i + 1 < len(merged):
+            # Collect the number and optional closing paren
+            prefix = cell  # e.g. '(' or '$('
+            num = merged[i + 1].strip()
+            if i + 2 < len(merged) and merged[i + 2].strip() == ')':
+                result.append(f"{prefix}{num})")
+                i += 3
+            else:
+                result.append(f"{prefix}{num}")
+                i += 2
+        else:
+            result.append(cell)
+            i += 1
     return result
 
 

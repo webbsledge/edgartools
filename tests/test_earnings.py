@@ -17,6 +17,8 @@ from edgar.earnings import (
     _classify_row_type,
     _classify_statement,
     _detect_table_scale,
+    _is_numeric_or_currency,
+    _merge_currency_symbols,
     _parse_numeric,
 )
 
@@ -539,3 +541,58 @@ class TestParseNumericSplitCell:
     def test_no_parens_still_positive(self):
         """1,234 → 1234.0 (no parens = positive)."""
         assert _parse_numeric("1,234") == 1234.0
+
+
+# ── Bug 5: Parenthesis recognition in _is_numeric_or_currency ────────────
+
+
+class TestIsNumericOrCurrencyParens:
+    """Standalone parens must be classified as data cells, not labels."""
+
+    def test_open_paren_is_numeric(self):
+        assert _is_numeric_or_currency("(") is True
+
+    def test_close_paren_is_numeric(self):
+        assert _is_numeric_or_currency(")") is True
+
+    def test_dollar_still_recognized(self):
+        assert _is_numeric_or_currency("$") is True
+
+    def test_label_not_recognized(self):
+        assert _is_numeric_or_currency("Revenue") is False
+
+
+# ── Bug 5: Parenthesis merging in _merge_currency_symbols ────────────────
+
+
+class TestMergeCurrencySymbolsParens:
+    """Split-cell parenthesized negatives get reassembled."""
+
+    def test_paren_number_paren(self):
+        """['(', '0.09', ')'] → ['(0.09)']"""
+        assert _merge_currency_symbols(["(", "0.09", ")"]) == ["(0.09)"]
+
+    def test_dollar_paren_number_paren(self):
+        """['$', '(', '0.09', ')'] → ['$(0.09)']"""
+        assert _merge_currency_symbols(["$", "(", "0.09", ")"]) == ["$(0.09)"]
+
+    def test_paren_number_no_close(self):
+        """['(', '0.09'] → ['(0.09'] (no closing paren)."""
+        assert _merge_currency_symbols(["(", "0.09"]) == ["(0.09"]
+
+    def test_no_parens_unchanged(self):
+        """['$', '100'] → ['$100'] (existing behavior preserved)."""
+        assert _merge_currency_symbols(["$", "100"]) == ["$100"]
+
+    def test_multiple_values_with_parens(self):
+        """Multiple columns: ['(', '0.09', ')', '1.23'] → ['(0.09)', '1.23']"""
+        assert _merge_currency_symbols(["(", "0.09", ")", "1.23"]) == ["(0.09)", "1.23"]
+
+    def test_empty_list(self):
+        assert _merge_currency_symbols([]) == []
+
+    def test_paren_merged_value_parses_negative(self):
+        """End-to-end: split cells merge then parse to negative."""
+        merged = _merge_currency_symbols(["$", "(", "0.09", ")"])
+        assert len(merged) == 1
+        assert _parse_numeric(merged[0]) == -0.09
