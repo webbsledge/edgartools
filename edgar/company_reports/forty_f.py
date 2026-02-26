@@ -145,6 +145,99 @@ def _find_aif_attachment(filing) -> Tuple[Optional[object], str]:
 
 
 # ---------------------------------------------------------------------------
+# MD&A identification
+# ---------------------------------------------------------------------------
+
+_MDA_CONTENT_SIGNALS = (
+    "MANAGEMENT'S DISCUSSION AND ANALYSIS",
+    'MANAGEMENT DISCUSSION AND ANALYSIS',
+    'RESULTS OF OPERATIONS',
+    'LIQUIDITY AND CAPITAL RESOURCES',
+)
+
+
+def _has_mda_content(url: str) -> bool:
+    """Quick check: does the document contain MD&A section headings?
+
+    Requires 2+ signals to reduce false positives (financial statements
+    may mention "results of operations" in passing).
+    """
+    from edgar.httprequests import download_text
+    html = (download_text(url) or '')[:80_000]
+    upper = html.upper()
+    return sum(1 for sig in _MDA_CONTENT_SIGNALS if sig in upper) >= 2
+
+
+def _find_mda_attachment(filing, aif_attachment=None) -> Tuple[Optional[object], str]:
+    """Find the MD&A exhibit attachment in a 40-F filing.
+
+    Canadian filers often include a separate MD&A document as an EX-99.x
+    exhibit (e.g. Manulife files ``annualmdareport``).
+
+    Args:
+        filing: The 40-F Filing object.
+        aif_attachment: The already-identified AIF attachment to exclude.
+
+    Priority chain:
+    1. Description containing 'MD&A' or 'MANAGEMENT DISCUSSION'
+    2. Any EX-99.x with 'mda' or 'managementdiscussion' in filename
+    3. Content-sniff remaining major EX-99.x exhibits (excluding the AIF)
+    """
+    hp_atts = filing.homepage.attachments
+    aif_url = str(getattr(aif_attachment, 'url', '') or '') if aif_attachment else ''
+
+    desc_candidates = []
+    filename_candidates = []
+    ex99_candidates = []
+
+    for att in hp_atts:
+        doc_type = (getattr(att, 'document_type', '') or '').strip()
+        desc = (getattr(att, 'description', '') or '').upper()
+        url = str(getattr(att, 'url', '') or '')
+        filename = url.split('/')[-1].lower()
+
+        if doc_type in _SKIP_TYPES:
+            continue
+        if not url.endswith(('.htm', '.html', '.xhtml')):
+            continue
+        # Skip the AIF attachment
+        if aif_url and url == aif_url:
+            continue
+
+        if not doc_type.startswith('EX-99') and doc_type not in ('40-F', '40-F/A'):
+            continue
+
+        # Priority 1: description match
+        if ("MD&A" in desc
+                or "MANAGEMENT DISCUSSION" in desc
+                or "MANAGEMENT'S DISCUSSION" in desc):
+            desc_candidates.append(att)
+        # Priority 2: filename match
+        elif doc_type.startswith('EX-99') and any(
+            kw in filename for kw in ('mda', 'managementdiscussion')
+        ):
+            filename_candidates.append(att)
+        elif doc_type.startswith('EX-99'):
+            ex99_candidates.append(att)
+
+    if desc_candidates:
+        return desc_candidates[0], 'Description mentions MD&A'
+
+    if filename_candidates:
+        return filename_candidates[0], 'EX-99.x with MD&A in filename'
+
+    # Priority 3: content-sniff remaining major EX-99.x exhibits
+    major = [a for a in ex99_candidates
+             if (getattr(a, 'size', None) or 0) > _MAJOR_EXHIBIT_THRESHOLD]
+
+    for att in major:
+        if _has_mda_content(att.url):
+            return att, 'EX-99.x with MD&A content'
+
+    return None, 'MD&A not found'
+
+
+# ---------------------------------------------------------------------------
 # Business-section extraction (regex on plain text)
 # ---------------------------------------------------------------------------
 
@@ -394,6 +487,40 @@ class FortyF(CompanyReport):
         parser = HTMLParser(ParserConfig(form='40-F'))
         return parser.parse(html)
 
+    # -- MD&A discovery ------------------------------------------------------
+
+    @cached_property
+    def _mda_result(self) -> Tuple[Optional[object], str]:
+        return _find_mda_attachment(self._filing, self.aif_attachment)
+
+    @cached_property
+    def mda_attachment(self):
+        """The MD&A exhibit attachment, or ``None`` if not found."""
+        return self._mda_result[0]
+
+    @cached_property
+    def mda_html(self) -> Optional[str]:
+        """Raw HTML of the MD&A document."""
+        att = self.mda_attachment
+        if att is None:
+            return None
+        from edgar.httprequests import download_text
+        return download_text(att.url)
+
+    @cached_property
+    def mda_text(self) -> Optional[str]:
+        """Plain text of the MD&A document."""
+        html = self.mda_html
+        if not html:
+            return None
+        try:
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(html, 'html.parser')
+            return soup.get_text()
+        except ImportError:
+            text = re.sub(r'<[^>]+>', ' ', html)
+            return re.sub(r'\s+', ' ', text)
+
     # -- Business section ----------------------------------------------------
 
     @cached_property
@@ -527,6 +654,9 @@ class FortyF(CompanyReport):
         aif_status = "found" if self.aif_attachment else "not found"
         lines.append(f"AIF: {aif_status}")
 
+        mda_status = "found" if self.mda_attachment else "not found"
+        lines.append(f"MD&A: {mda_status}")
+
         if detail in ('standard', 'full'):
             items = self.items
             if items:
@@ -548,6 +678,8 @@ class FortyF(CompanyReport):
             lines.append("  .balance_sheet             # Balance sheet")
             lines.append("  .aif_text                  # Full AIF plain text for LLM input")
             lines.append("  .aif_html                  # Raw AIF HTML")
+            lines.append("  .mda_text                  # Full MD&A plain text for LLM input")
+            lines.append("  .mda_html                  # Raw MD&A HTML")
             lines.append("")
             lines.append("SECTION LOOKUP:")
             lines.append("  forty_f['Risk Factors']    # Exact match")
@@ -627,11 +759,13 @@ class FortyF(CompanyReport):
             (f"{datefmt(self.filing_date, '%B %d, %Y')}", "bold"),
         )
         aif_info = Text(f"AIF: {self._aif_result[1]}", style="dim")
+        mda_info = Text(f"MD&A: {self._mda_result[1]}", style="dim")
 
         panel = Panel(
             Group(
                 periods,
                 aif_info,
+                mda_info,
                 Padding(" ", (1, 0, 0, 0)),
                 self.get_structure(),
                 Padding(" ", (1, 0, 0, 0)),

@@ -251,3 +251,86 @@ class TestFinancials:
     def test_balance_sheet(self, shop_forty_f):
         stmt = shop_forty_f.balance_sheet
         assert stmt is not None
+
+
+# ---------------------------------------------------------------------------
+# MD&A discovery — filer with separate MD&A exhibit (Manulife Financial)
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope="module")
+def mfc_40f_filing():
+    """Manulife Financial Corp. 40-F filing (fiscal year ending Dec 31, 2024)."""
+    return Filing(
+        company='MANULIFE FINANCIAL CORP', cik=1086888, form='40-F',
+        filing_date='2025-02-19', accession_no='0001086888-25-000054',
+    )
+
+
+@pytest.fixture(scope="module")
+def mfc_forty_f(mfc_40f_filing):
+    """FortyF object for Manulife — cached for the module."""
+    return mfc_40f_filing.obj()
+
+
+class TestMDADiscovery:
+
+    @pytest.mark.network
+    def test_mda_attachment_found(self, mfc_forty_f):
+        """MFC includes a separate MD&A as an EX-99.x exhibit."""
+        assert mfc_forty_f.mda_attachment is not None
+
+    @pytest.mark.network
+    def test_mda_different_from_aif(self, mfc_forty_f):
+        """The MD&A exhibit must be a different attachment from the AIF."""
+        aif = mfc_forty_f.aif_attachment
+        mda = mfc_forty_f.mda_attachment
+        assert aif is not None
+        assert mda is not None
+        assert str(aif.url) != str(mda.url)
+
+    @pytest.mark.network
+    def test_mda_html_not_empty(self, mfc_forty_f):
+        """The MD&A HTML should be a substantial document."""
+        html = mfc_forty_f.mda_html
+        assert html is not None
+        assert len(html) > 10_000
+
+    @pytest.mark.network
+    def test_mda_text_contains_mda_headings(self, mfc_forty_f):
+        """The MD&A text should contain characteristic MD&A headings."""
+        text = mfc_forty_f.mda_text
+        assert text is not None
+        upper = text.upper()
+        assert 'MANAGEMENT' in upper
+        assert 'DISCUSSION' in upper or 'ANALYSIS' in upper
+
+    @pytest.mark.network
+    def test_shop_has_no_separate_mda(self, shop_forty_f):
+        """SHOP does not file a separate MD&A — returns None gracefully."""
+        assert shop_forty_f.mda_attachment is None
+        assert shop_forty_f.mda_html is None
+        assert shop_forty_f.mda_text is None
+
+
+class TestMDADisplay:
+
+    @pytest.mark.network
+    def test_repr_contains_mda_line(self, mfc_forty_f):
+        r = repr(mfc_forty_f)
+        assert 'MD&A' in r
+
+    @pytest.mark.network
+    def test_to_context_shows_mda_status(self, mfc_forty_f):
+        ctx = mfc_forty_f.to_context('minimal')
+        assert 'MD&A: found' in ctx
+
+    @pytest.mark.network
+    def test_to_context_shows_mda_not_found(self, shop_forty_f):
+        ctx = shop_forty_f.to_context('minimal')
+        assert 'MD&A: not found' in ctx
+
+    @pytest.mark.network
+    def test_to_context_lists_mda_properties(self, mfc_forty_f):
+        ctx = mfc_forty_f.to_context()
+        assert '.mda_text' in ctx
+        assert '.mda_html' in ctx
