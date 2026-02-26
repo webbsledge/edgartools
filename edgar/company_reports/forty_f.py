@@ -192,16 +192,19 @@ def _is_toc_entry(text: str, match) -> bool:
     """
     after = text[match.end():match.end() + 500]
     stripped = after.lstrip()
-    # Inline TOC: bare page number immediately follows header (CNQ style).
-    # Exclude subsection numbers like "4.1" (digit-dot pattern).
-    if re.match(r'^\d+(?:\s|$)', stripped) and not re.match(r'^\d+\.', stripped):
+    # Inline TOC: page number follows header — digits then whitespace, end-of-string,
+    # or uppercase letter (compact TOC where next heading starts immediately,
+    # e.g. CNQ "8Description").  Exclude subsection numbers like "4.1".
+    if not re.match(r'^\d+[.]\d', stripped) and re.match(r'^\d+(?:\s|$|[A-Z])', stripped):
         return True
-    # Multi-line TOC: bare page numbers on standalone lines (RY/CM style).
-    # Page numbers may use em-dash (U+2013) or en-dash (U+2014) for ranges.
-    page_line_re = re.compile(
-        r'(?:^|\n)\s*\xa0?\s*(\d[\d\-\u2013\u2014,\s]*?\d?)\s*\xa0?\s*(?:\n|$)'
+    # Multi-line TOC: 2+ bare page numbers (1-3 digits) on standalone lines
+    # within 300 chars.  Restricting to \d{1,3} avoids matching years (2024)
+    # in financial tables.
+    short_after = after[:300]
+    page_nums = re.findall(
+        r'(?:^|\n)\s*\xa0?\s*(\d{1,3}(?:[\-\u2013\u2014]\d{1,3})?)\s*\xa0?\s*(?:\n|$)',
+        short_after
     )
-    page_nums = page_line_re.findall(after)
     if len(page_nums) >= 2:
         return True
     return False
@@ -215,6 +218,9 @@ def _is_cross_reference(text: str, match) -> bool:
         return True
     # 'See X', 'under X'
     if re.search(r'\b(?:see|under)\s+["\u201c]?\s*$', before, re.IGNORECASE):
+        return True
+    # Quoted section reference: "Section 6 - Description of the Business"
+    if re.search(r'["\u201c](?:Section|Item|Appendix)\s', before, re.IGNORECASE):
         return True
     # Mid-sentence: lowercase word ending on the SAME LINE immediately before
     # match — but exclude page footers (gap ends with a Capitalized word like
