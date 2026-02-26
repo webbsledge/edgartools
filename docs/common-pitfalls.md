@@ -89,16 +89,13 @@ print(f"${revenue/1e9:.1f}B")         # "$391.0B"
 
 ### The cash flow method is `cashflow_statement()`
 
-The method name is `cashflow_statement()` (no underscore between "cash" and "flow"). All three statements follow the same pattern:
+The canonical method name is `cashflow_statement()` (no underscore between "cash" and "flow"). The alias `cash_flow_statement()` also works. All three statements follow the same pattern:
 
 ```python
 financials.income_statement()       # Income statement
 financials.balance_sheet()          # Balance sheet
-financials.cashflow_statement()     # Cash flow statement (NOT cash_flow_statement)
+financials.cashflow_statement()     # Cash flow statement (cash_flow_statement() also works)
 ```
-
-!!! note "Aliases on the Company object"
-    The `Company` object also has a `cash_flow()` shortcut that works: `company.cash_flow()`. But on the `Financials` object, use `cashflow_statement()`.
 
 ---
 

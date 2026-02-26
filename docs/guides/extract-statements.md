@@ -504,6 +504,24 @@ print(comparison_df[['ticker', 'revenue_b', 'net_income_b', 'net_margin', 'roa']
 
 The new standardized methods make cross-company analysis much more reliable and easier to implement!
 
+## Notes and Disclosures
+
+XBRL filings contain notes and disclosure sections beyond the primary financial statements. Access them with convenience methods:
+
+```python
+xbrl = filing.xbrl()
+
+# Browse all note sections (e.g., accounting policies, segment data)
+for note in xbrl.notes():
+    print(note.title)
+
+# Browse all disclosure sections (e.g., revenue disaggregation, debt details)
+for disc in xbrl.disclosures():
+    print(disc.title)
+```
+
+These return the same statement objects as `xbrl.statements`, filtered to notes and disclosures respectively.
+
 ## Advanced XBRL Features
 
 ### Access Raw XBRL Facts

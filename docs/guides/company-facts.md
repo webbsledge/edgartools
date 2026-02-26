@@ -369,6 +369,25 @@ for item in stmt.iter_with_values():
         print(f"Low confidence: {item.label} ({item.confidence:.2f})")
 ```
 
+## Discovering Available Data
+
+Not sure what a company reports? Use the discovery methods to explore before querying:
+
+```python
+facts = company.get_facts()
+
+# Search for concepts by keyword
+facts.search_concepts("revenue")      # Find all revenue-related concepts
+facts.search_concepts("debt")         # Find debt-related concepts
+
+# See what periods have data for a concept
+facts.available_periods("Revenue")    # List all periods with Revenue data
+```
+
+These methods are especially useful when `get_fact()` returns `None` — the warnings will suggest using `search_concepts()` to find the right concept name and `available_periods()` to find valid periods.
+
+Both period formats work interchangeably: `"2023-FY"` and `"FY 2023"` are equivalent.
+
 ## Advanced Usage
 
 ### Working with EntityFacts Directly
@@ -1042,6 +1061,15 @@ shares_value = facts.shares_outstanding       # Direct numeric value
 - **Performance**: Optimized caching and data structures
 
 ## Troubleshooting
+
+**Q: `get_fact()` or `get_concept()` returned None — how do I find the right concept?**
+A: These methods now emit a warning when a concept is not found, including suggestions for similar concept names. Use `search_concepts()` to find what the company actually reports, and `available_periods()` to see what periods have data:
+
+```python
+facts = company.get_facts()
+facts.search_concepts("revenue")      # Shows all revenue-related concepts
+facts.available_periods("Revenue")    # Shows periods with Revenue data
+```
 
 **Q: Why do some companies return None for financial statements?**
 A: Not all companies have facts data available through the SEC API. This is normal for some entity types. The enhanced API provides better error handling and fallback strategies.

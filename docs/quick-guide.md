@@ -39,6 +39,7 @@ Common EdgarTools operations at a glance. For a step-by-step introduction, see t
 | 💸 Get the cash flow statement           | `financials.cashflow_statement()`                             |
 | 💰 Get revenue                           | `financials.get_revenue()`                                    |
 | 💵 Get net income                        | `financials.get_net_income()`                                 |
+| 📊 Get operating income                  | `financials.get_operating_income()`                           |
 | 🐼 Export statement to DataFrame         | `financials.income_statement().to_dataframe()`                |
 
 ### Working with filings 📁
@@ -121,6 +122,7 @@ Common EdgarTools operations at a glance. For a step-by-step introduction, see t
 | 📊 Get the XBRL of the filing       | `filing.xbrl()`              |
 | 📝 Get the filing as markdown       | `filing.markdown()`          |
 | 📄 Get the full submission text     | `filing.full_text_submission()` |
+| 🔍 Preview data object type         | `filing.obj_type`            |
 | 🔢 Get and parse filing data object | `filing.obj()`               |
 | 📑 Get filing header                | `filing.header`              |
 

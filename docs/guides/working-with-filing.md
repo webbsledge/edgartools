@@ -279,6 +279,16 @@ if xbrl:
     print(income)
 ```
 
+### Preview the Data Object Type
+
+Before calling `obj()`, you can check what type of object a filing will return:
+
+```python
+filing.obj_type  # e.g. 'TenK', 'ThirteenF', 'Form4', None
+```
+
+This is useful for filtering filings to only those with structured data objects.
+
 ### Get Form-Specific Object
 
 Get a structured object based on the form type:

@@ -42,6 +42,7 @@ total_assets = financials.get_total_assets()
 |--------|---------|
 | `get_revenue()` | Total revenue / net sales |
 | `get_net_income()` | Net income |
+| `get_operating_income()` | Operating income / loss |
 | `get_total_assets()` | Total assets |
 | `get_total_liabilities()` | Total liabilities |
 | `get_stockholders_equity()` | Stockholders' equity |

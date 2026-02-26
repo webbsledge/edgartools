@@ -18,6 +18,7 @@ patterns:
     code: |
       financials.get_revenue()                    # Total revenue
       financials.get_net_income()                 # Net income
+      financials.get_operating_income()           # Operating income
       financials.get_total_assets()               # Total assets
       financials.get_total_liabilities()          # Total liabilities
       financials.get_stockholders_equity()        # Stockholders equity
