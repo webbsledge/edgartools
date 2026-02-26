@@ -26,11 +26,16 @@ _SKIP_TYPES = frozenset({
 
 
 def _scan_attachments(attachments):
-    """Classify 40-F attachments by AIF-likelihood tier."""
+    """Classify 40-F attachments by AIF-likelihood tier.
+
+    Collects ALL EX-99.x exhibits as content-sniff candidates.  The AIF
+    may appear as any EX-99.x number (e.g. ENB uses EX-99.5).  Content
+    sniffing plus size thresholds safely filter non-AIF exhibits.
+    """
     ex1_candidates = []
     aif_desc_candidates = []
-    ex991_named_candidates = []
-    ex991_unnamed_candidates = []
+    ex99_named_candidates = []   # any EX-99.x with AIF keywords in filename
+    ex99_candidates = []         # all EX-99.x (for content sniffing)
     main_40f = None
 
     for att in attachments:
@@ -48,67 +53,89 @@ def _scan_attachments(attachments):
             ex1_candidates.append(att)
         elif 'ANNUAL INFORMATION' in desc or re.search(r'\bAIF\b', desc):
             aif_desc_candidates.append(att)
-        elif doc_type == 'EX-99.1' and any(
+        elif doc_type.startswith('EX-99') and any(
             kw in filename for kw in ('annual', 'aif', 'annualinformation')
         ):
-            ex991_named_candidates.append(att)
-        elif doc_type == 'EX-99.1':
-            ex991_unnamed_candidates.append(att)
+            ex99_named_candidates.append(att)
+        elif doc_type.startswith('EX-99'):
+            ex99_candidates.append(att)
         elif doc_type in ('40-F', '40-F/A'):
             main_40f = att
 
-    return ex1_candidates, aif_desc_candidates, ex991_named_candidates, ex991_unnamed_candidates, main_40f
+    return ex1_candidates, aif_desc_candidates, ex99_named_candidates, ex99_candidates, main_40f
+
+
+_MAJOR_EXHIBIT_THRESHOLD = 100_000  # 100 KB — separates real docs from certs/consents
+
+# NI 51-102 headings used to detect AIF content (case-insensitive check)
+_AIF_CONTENT_SIGNALS = ('CORPORATE STRUCTURE', 'DESCRIPTION OF THE BUSINESS',
+                        'GENERAL DEVELOPMENT OF THE BUSINESS', 'RISK FACTORS')
+
+
+def _has_aif_content(url: str) -> bool:
+    """Quick check: does the document contain NI 51-102 AIF section headings?
+
+    Scans the first 80 KB of HTML — some AIFs (e.g. TELUS) have a lengthy
+    preamble before the NI 51-102 headings appear.
+    """
+    from edgar.httprequests import download_text
+    html = (download_text(url) or '')[:80_000]
+    upper = html.upper()
+    return any(sig in upper for sig in _AIF_CONTENT_SIGNALS)
 
 
 def _find_aif_attachment(filing) -> Tuple[Optional[object], str]:
     """Find the Annual Information Form (AIF) attachment in a 40-F filing.
 
+    Uses ``filing.homepage.attachments`` (which carry file sizes) to
+    reliably identify the AIF among potentially many EX-99.x exhibits.
+
     Priority chain:
     1. EX-1 / EX-1.1 / EX-1.2 (standard MJDS AIF exhibits)
     2. Description containing 'ANNUAL INFORMATION' or 'AIF'
-    3. EX-99.1 with AIF keywords in filename
-    4. EX-99.1 unnamed — use size ratio to distinguish AIF from supplementary data
-    5. Main 40-F document (CNQ inline pattern)
-
-    Uses ``filing.attachments`` (SGML-parsed, no extra network hop) for
-    priorities 1-3.  Falls back to ``filing.homepage.attachments`` only when
-    we reach priority 4 and need file sizes for the size-ratio heuristic.
+    3. Any EX-99.x with 'aif' in filename (prefer over 'annual')
+    4. Content-sniff primary EX-99.x exhibits for NI 51-102 headings
+    5. Main 40-F document (inline AIF, e.g. CNQ)
     """
-    (ex1, aif_desc, ex991_named,
-     ex991_unnamed, main_40f) = _scan_attachments(filing.attachments)
+    hp_atts = filing.homepage.attachments
+    (ex1, aif_desc, ex99_named,
+     ex99_all, main_40f) = _scan_attachments(hp_atts)
 
-    # Priorities 1-3 don't need sizes
+    # Priority 1: EX-1 standard MJDS exhibits
     if ex1:
         return ex1[0], 'EX-1/EX-1.1/EX-1.2 (standard MJDS)'
+
+    # Priority 2: Description mentions AIF
     if aif_desc:
         return aif_desc[0], 'Description mentions ANNUAL INFORMATION'
-    if ex991_named:
-        return ex991_named[0], 'EX-99.1 with AIF filename keywords'
 
-    # Priority 4: unnamed EX-99.1 — need sizes to distinguish Barrick (EX-99.1
-    # IS the AIF) from CNQ (EX-99.1 is supplementary data, main doc is AIF).
-    # Rescan via homepage.attachments which always carry file sizes.
-    if ex991_unnamed:
-        (_, _, _, hp_ex991_unnamed,
-         hp_main_40f) = _scan_attachments(filing.homepage.attachments)
+    # Priority 3: AIF keyword in filename (any EX-99.x)
+    # Prefer "aif" over "annual" (MFC has "annualmdareport" for MD&A)
+    if ex99_named:
+        aif_specific = [a for a in ex99_named
+                        if 'aif' in str(getattr(a, 'url', '')).split('/')[-1].lower()]
+        if aif_specific:
+            return aif_specific[0], 'EX-99.x with AIF in filename'
+        return ex99_named[0], 'EX-99.x with AIF filename keywords'
 
-        ex991_att = hp_ex991_unnamed[0] if hp_ex991_unnamed else ex991_unnamed[0]
-        ex991_size = getattr(ex991_att, 'size', None) or 0
-        hp_main_size = (getattr(hp_main_40f, 'size', None) or 0) if hp_main_40f else 0
+    # Priority 4: Content-sniff ALL EX-99.x candidates (>100 KB)
+    # Check each for NI 51-102 section headings — the AIF will have them,
+    # financial statements and MD&A will not.  Some filers use high exhibit
+    # numbers (e.g. ENB uses EX-99.5), so we check all of them.
+    major = [a for a in ex99_all
+             if (getattr(a, 'size', None) or 0) > _MAJOR_EXHIBIT_THRESHOLD]
 
-        # If sizes are unknown, default to EX-99.1 (more likely to be AIF)
-        if ex991_size == 0 and hp_main_size == 0:
-            return ex991_att, 'EX-99.1 first major exhibit (likely AIF)'
+    for att in major:
+        if _has_aif_content(att.url):
+            return att, 'EX-99.x with AIF content'
 
-        # CNQ: EX-99.1 (624 KB) << 40-F (6.3 MB), ratio ~0.10 → main doc is AIF
-        # Barrick: EX-99.1 (1.79 MB) >> 40-F (505 KB), ratio > 1 → EX-99.1 is AIF
-        if hp_main_size > 0 and ex991_size / hp_main_size < 0.20:
-            return hp_main_40f or main_40f, '40-F main document (AIF embedded inline)'
-        return ex991_att, 'EX-99.1 first major exhibit (likely AIF)'
-
-    # Priority 5: main 40-F document (no separate AIF exhibit at all)
+    # Priority 5: main 40-F document (inline AIF, e.g. CNQ)
     if main_40f:
         return main_40f, '40-F main document (AIF embedded inline)'
+
+    # Last resort: return the first major exhibit if any
+    if major:
+        return major[0], 'EX-99.x first major exhibit (fallback)'
 
     return None, 'AIF not found'
 
@@ -118,9 +145,10 @@ def _find_aif_attachment(filing) -> Tuple[Optional[object], str]:
 # ---------------------------------------------------------------------------
 
 _BUSINESS_STARTS = [
-    r'(?:NARRATIVE\s+)?DESCRIPTION\s+OF\s+THE\s+BUSINESS',
-    r'BUSINESS\s+OF\s+THE\s+(?:MANAGER|COMPANY|CORPORATION|TRUST|FUND)',
+    r'(?:NARRATIVE\s+)?DESCRIPTION\s+OF\s+(?:THE\s+)?(?:\w[\w\'\u2019]*\s+)?BUSINESS(?:ES)?',
+    r'BUSINESS\s+OF\s+(?:THE\s+)?(?:[\w][\w\'\u2019]*(?:\s+[\w][\w\'\u2019]*){0,3})',
     r'DESCRIPTION\s+OF\s+BUSINESS',
+    r'BUSINESS\s+OPERATIONS',
     r'BUSINESS\s+OVERVIEW',
     r'DESCRIPTION\s+OF\s+OPERATIONS',
 ]
@@ -141,8 +169,9 @@ _BUSINESS_ENDS = [
 _SECTION_PATTERNS = [
     r'CORPORATE\s+STRUCTURE',
     r'GENERAL\s+DEVELOPMENT\s+OF\s+THE\s+BUSINESS',
-    r'(?:NARRATIVE\s+)?DESCRIPTION\s+OF\s+THE\s+BUSINESS',
-    r'BUSINESS\s+OF\s+THE\s+(?:MANAGER|COMPANY|CORPORATION|TRUST|FUND)',
+    r'(?:NARRATIVE\s+)?DESCRIPTION\s+OF\s+(?:THE\s+)?(?:\w[\w\'\u2019]*\s+)?BUSINESS(?:ES)?',
+    r'BUSINESS\s+OF\s+(?:THE\s+)?(?:[\w][\w\'\u2019]*(?:\s+[\w][\w\'\u2019]*){0,3})',
+    r'BUSINESS\s+OPERATIONS',
     r'DESCRIPTION\s+OF\s+CAPITAL\s+STRUCTURE',
     r'MARKET\s+FOR\s+SECURITIES',
     r'DIVIDENDS(?:\s+AND\s+DISTRIBUTIONS)?',
@@ -151,22 +180,30 @@ _SECTION_PATTERNS = [
     r'LEGAL\s+(?:PROCEEDINGS|MATTERS)',
     r'MATERIAL\s+PROPERTIES',
     r'CODE\s+OF\s+BUSINESS\s+CONDUCT',
+    r'BUSINESS\s+OVERVIEW',
 ]
 
 
 def _is_toc_entry(text: str, match) -> bool:
-    """Detect TOC entries: inline page numbers or multi-line page numbers."""
-    after = text[match.end():match.end() + 100]
-    # Inline TOC: digit immediately follows header (CNQ style)
+    """Detect TOC entries: inline page numbers or multi-line page numbers.
+
+    Avoids false positives on subsection numbers (e.g. "4.1 OVERVIEW").
+    Handles em-dash/en-dash page ranges (e.g. "1\u2013100", "42\u201381").
+    """
+    after = text[match.end():match.end() + 500]
     stripped = after.lstrip()
-    if re.match(r'^\d+\w*', stripped):
+    # Inline TOC: bare page number immediately follows header (CNQ style).
+    # Exclude subsection numbers like "4.1" (digit-dot pattern).
+    if re.match(r'^\d+(?:\s|$)', stripped) and not re.match(r'^\d+\.', stripped):
         return True
-    # Multi-line TOC: page number on a subsequent line (RY style)
-    lines = after.split('\n')
-    for line in lines[1:4]:
-        s = line.strip().strip('\xa0')
-        if s and re.match(r'^\d+[\-\d]*\*?\s*$', s):
-            return True
+    # Multi-line TOC: bare page numbers on standalone lines (RY/CM style).
+    # Page numbers may use em-dash (U+2013) or en-dash (U+2014) for ranges.
+    page_line_re = re.compile(
+        r'(?:^|\n)\s*\xa0?\s*(\d[\d\-\u2013\u2014,\s]*?\d?)\s*\xa0?\s*(?:\n|$)'
+    )
+    page_nums = page_line_re.findall(after)
+    if len(page_nums) >= 2:
+        return True
     return False
 
 
@@ -206,7 +243,7 @@ def _find_first_clean_match(text: str, pattern: str, min_pos: int):
 
 def _find_section_positions(full_text: str) -> List[Tuple[int, str]]:
     """Detect all NI 51-102 section headers and their positions in AIF text."""
-    min_content_pos = max(5000, int(len(full_text) * 0.03))
+    min_content_pos = min(max(5000, int(len(full_text) * 0.03)), 10_000)
     found = []
     for pattern in _SECTION_PATTERNS:
         m = _find_first_clean_match(full_text, pattern, min_content_pos)
@@ -214,7 +251,15 @@ def _find_section_positions(full_text: str) -> List[Tuple[int, str]]:
             name = re.sub(r'\s+', ' ', m.group()).strip()
             found.append((m.start(), name))
     found.sort(key=lambda t: t[0])
-    return found
+    # Deduplicate: if two sections start within 200 chars, keep the first.
+    # This handles subsection headings (e.g. "Business Overview" right after
+    # "Description of the Business") that match separate patterns.
+    deduped = []
+    for pos, name in found:
+        if deduped and pos - deduped[-1][0] < 200:
+            continue
+        deduped.append((pos, name))
+    return deduped
 
 
 def _extract_section_text(full_text: str, positions: List[Tuple[int, str]], idx: int) -> str:
@@ -238,11 +283,13 @@ def _extract_business_section(full_text: str) -> Optional[str]:
     for idx, (_, name) in enumerate(positions):
         upper = name.upper()
         if ('DESCRIPTION' in upper and 'BUSINESS' in upper) or \
-           ('BUSINESS OF THE' in upper):
+           upper.startswith('BUSINESS OF') or \
+           upper.startswith('BUSINESS OVERVIEW') or \
+           upper.startswith('BUSINESS OPERATIONS'):
             return _extract_section_text(full_text, positions, idx)
 
     # Fallback: use start/end pattern matching (original algorithm)
-    min_content_pos = max(5000, int(len(full_text) * 0.03))
+    min_content_pos = min(max(5000, int(len(full_text) * 0.03)), 10_000)
     for pattern in _BUSINESS_STARTS:
         m = _find_first_clean_match(full_text, pattern, min_content_pos)
         if m:
