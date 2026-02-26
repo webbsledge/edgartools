@@ -195,6 +195,7 @@ def get_obj_info(form: str) -> tuple[bool, Optional[str], Optional[str]]:
         '10-K': ('TenK', 'annual report with financials'),
         '10-D': ('TenD', 'ABS distribution report'),
         '20-F': ('TwentyF', 'foreign issuer annual report'),
+        '40-F': ('FortyF', 'Canadian MJDS annual report'),
         '13F-HR': ('ThirteenF', 'institutional holdings'),
         '13F-HR/A': ('ThirteenF', 'institutional holdings'),
         'SCHEDULE 13D': ('Schedule13D', 'beneficial ownership report (5%+ stake, active)'),
@@ -266,6 +267,9 @@ def obj(sec_filing: Filing) -> Optional[object]:
             return TenD(sec_filing)
     elif matches_form(sec_filing, "20-F"):
         return TwentyF(sec_filing)
+    elif matches_form(sec_filing, "40-F"):
+        from edgar.company_reports import FortyF
+        return FortyF(sec_filing)
     elif matches_form(sec_filing, THIRTEENF_FORMS):
         # ThirteenF can work with either XML (2013+) or TXT (2012 and earlier) format
         return ThirteenF(sec_filing)

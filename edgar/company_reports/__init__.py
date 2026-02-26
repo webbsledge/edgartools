@@ -1,5 +1,5 @@
 """
-Company report filing classes for Form 10-K, 10-Q, 20-F, 8-K, and 6-K.
+Company report filing classes for Form 10-K, 10-Q, 20-F, 40-F, 8-K, and 6-K.
 
 This package provides structured access to company reports and their contents.
 All classes are re-exported at the package level for backward compatibility.
@@ -19,6 +19,7 @@ from edgar.company_reports.press_release import PressRelease, PressReleases
 from edgar.company_reports.ten_k import TenK
 from edgar.company_reports.ten_q import TenQ
 from edgar.company_reports.twenty_f import TwentyF
+from edgar.company_reports.forty_f import FortyF
 
 # Import Financials for backward compatibility
 from edgar.financials import Financials
@@ -34,6 +35,7 @@ __all__ = [
     'TenK',
     'TenQ',
     'TwentyF',
+    'FortyF',
     'CurrentReport',
     'EightK',
     'SixK',
