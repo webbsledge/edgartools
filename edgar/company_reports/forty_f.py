@@ -3,10 +3,14 @@ import re
 from functools import cached_property
 from typing import List, Optional, Tuple
 
+from rich import box
 from rich.console import Group, Text
+from rich.padding import Padding
 from rich.panel import Panel
+from rich.tree import Tree
 
 from edgar.company_reports._base import CompanyReport
+from edgar.display.formatting import datefmt
 from edgar.richtools import repr_rich
 
 __all__ = ['FortyF']
@@ -154,7 +158,7 @@ _BUSINESS_STARTS = [
 ]
 
 _BUSINESS_ENDS = [
-    r'GENERAL\s+DEVELOPMENT\s+OF\s+THE\s+BUSINESS',
+    r'GENERAL\s+DEVELOPMENT\s+OF\s+(?:THE\s+)?(?:[\w\-][\w\-\'\u2019]*\s+)?BUSINESS',
     r'(?:THREE[\s-]YEAR|3[\s-]YEAR)\s+HISTORY',
     r'DESCRIPTION\s+OF\s+CAPITAL\s+STRUCTURE',
     r'MATERIAL\s+PROPERTIES',
@@ -168,7 +172,7 @@ _BUSINESS_ENDS = [
 # Section patterns for items detection (NI 51-102 AIF headings)
 _SECTION_PATTERNS = [
     r'CORPORATE\s+STRUCTURE',
-    r'GENERAL\s+DEVELOPMENT\s+OF\s+THE\s+BUSINESS',
+    r'GENERAL\s+DEVELOPMENT\s+OF\s+(?:THE\s+)?(?:[\w\-][\w\-\'\u2019]*\s+)?BUSINESS',
     r'(?:NARRATIVE\s+)?DESCRIPTION\s+OF\s+(?:THE\s+)?(?:\w[\w\'\u2019]*\s+)?BUSINESS(?:ES)?',
     r'BUSINESS\s+OF\s+(?:THE\s+)?(?:[\w][\w\'\u2019]*(?:\s+[\w][\w\'\u2019]*){0,3})',
     r'BUSINESS\s+OPERATIONS',
@@ -289,6 +293,7 @@ def _extract_business_section(full_text: str) -> Optional[str]:
     for idx, (_, name) in enumerate(positions):
         upper = name.upper()
         if ('DESCRIPTION' in upper and 'BUSINESS' in upper) or \
+           ('DEVELOPMENT' in upper and 'BUSINESS' in upper) or \
            upper.startswith('BUSINESS OF') or \
            upper.startswith('BUSINESS OVERVIEW') or \
            upper.startswith('BUSINESS OPERATIONS'):
@@ -349,8 +354,11 @@ class FortyF(CompanyReport):
         return self._aif_result[0]
 
     @cached_property
-    def _aif_html(self) -> Optional[str]:
-        """Raw HTML of the AIF document (single download, shared by consumers)."""
+    def aif_html(self) -> Optional[str]:
+        """Raw HTML of the AIF document.
+
+        Use this to render the AIF in a web UI or convert to other formats.
+        """
         att = self.aif_attachment
         if att is None:
             return None
@@ -360,7 +368,7 @@ class FortyF(CompanyReport):
     @cached_property
     def aif_document(self):
         """Parsed ``Document`` from the AIF exhibit HTML."""
-        html = self._aif_html
+        html = self.aif_html
         if not html:
             return None
         from edgar.documents import HTMLParser, ParserConfig
@@ -389,9 +397,12 @@ class FortyF(CompanyReport):
     # -- Business section ----------------------------------------------------
 
     @cached_property
-    def _aif_text(self) -> Optional[str]:
-        """Plain text of the AIF document (cached for reuse)."""
-        html = self._aif_html
+    def aif_text(self) -> Optional[str]:
+        """Full plain text of the AIF document.
+
+        Use this to feed the AIF into an LLM context window or text analysis pipeline.
+        """
+        html = self.aif_html
         if not html:
             return None
         try:
@@ -406,17 +417,49 @@ class FortyF(CompanyReport):
     @cached_property
     def business(self) -> Optional[str]:
         """Business description from the AIF 'Description of the Business' section."""
-        text = self._aif_text
+        text = self.aif_text
         if text is None:
             return None
         return _extract_business_section(text)
+
+    # -- Named section properties (NI 51-102 high-frequency sections) --------
+
+    @property
+    def risk_factors(self) -> Optional[str]:
+        """Risk Factors section from the AIF."""
+        return self['Risk Factors']
+
+    @property
+    def corporate_structure(self) -> Optional[str]:
+        """Corporate Structure section from the AIF."""
+        return self['Corporate Structure']
+
+    @property
+    def dividends(self) -> Optional[str]:
+        """Dividends section from the AIF."""
+        return self['Dividends']
+
+    @property
+    def capital_structure(self) -> Optional[str]:
+        """Description of Capital Structure section from the AIF."""
+        return self['Description Of Capital Structure']
+
+    @property
+    def directors_and_officers(self) -> Optional[str]:
+        """Directors and Officers section from the AIF."""
+        return self['Directors And Officers']
+
+    @property
+    def legal_proceedings(self) -> Optional[str]:
+        """Legal Proceedings section from the AIF."""
+        return self['Legal Proceedings']
 
     # -- Section listing / lookup --------------------------------------------
 
     @cached_property
     def _section_positions(self) -> List[Tuple[int, str]]:
         """Detected sections as (start_position, Title Case name) pairs."""
-        text = self._aif_text
+        text = self.aif_text
         if text is None:
             return []
         positions = _find_section_positions(text)
@@ -440,14 +483,26 @@ class FortyF(CompanyReport):
             forty_f["Description Of The Business"]
             forty_f["dividends"]       # case-insensitive
         """
-        text = self._aif_text
+        if not isinstance(key, str):
+            raise TypeError(f"Section key must be a string, got {type(key).__name__}")
+
+        text = self.aif_text
         positions = self._section_positions
         if not text or not positions:
             return None
 
         key_lower = key.lower().strip()
+        if not key_lower:
+            return None
+
+        # Exact case-insensitive match
         for idx, (_, name) in enumerate(positions):
             if name.lower() == key_lower:
+                return _extract_section_text(text, positions, idx)
+
+        # Keyword containment: "business" matches "Description Of The Business"
+        for idx, (_, name) in enumerate(positions):
+            if key_lower in name.lower():
                 return _extract_section_text(text, positions, idx)
 
         return None
@@ -457,16 +512,80 @@ class FortyF(CompanyReport):
     def __str__(self):
         return f"FortyF('{self.company}')"
 
+    def get_structure(self):
+        """Build a tree showing detected AIF sections."""
+        tree = Tree("📄 ")
+        # NI 51-102 expected sections (static reference)
+        expected = [
+            "Corporate Structure",
+            "General Development Of The Business",
+            "Description Of The Business",
+            "Risk Factors",
+            "Dividends",
+            "Description Of Capital Structure",
+            "Market For Securities",
+            "Directors And Officers",
+            "Legal Proceedings",
+        ]
+        detected_lower = [name.lower() for name in self.items]
+
+        def _matches_detected(section_lower: str) -> bool:
+            """Check if an expected section matches any detected section (containment)."""
+            for d in detected_lower:
+                if section_lower == d or section_lower in d or d in section_lower:
+                    return True
+            return False
+
+        def _matches_expected(name_lower: str) -> bool:
+            """Check if a detected section matches any expected section (containment)."""
+            for s in expected:
+                sl = s.lower()
+                if name_lower == sl or sl in name_lower or name_lower in sl:
+                    return True
+            return False
+
+        for section in expected:
+            if _matches_detected(section.lower()):
+                tree.add(Text(section, style="bold green"))
+            else:
+                tree.add(Text(section, style="dim"))
+
+        # Also show any detected sections not in the expected list
+        for name in self.items:
+            if not _matches_expected(name.lower()):
+                tree.add(Text.assemble(
+                    (name, "bold green"),
+                    (" *", "dim"),
+                ))
+        return tree
+
     def __rich__(self):
-        aif_reason = self._aif_result[1]
-        aif_info = Text(f"AIF: {aif_reason}", style="dim")
-        return Panel(
-            Group(
-                self._filing.__rich__(),
-                aif_info,
-                self.financials or Text("No financial data available"),
-            )
+        title = Text.assemble(
+            (f"{self.company}", "bold deep_sky_blue1"),
+            (" ", ""),
+            (f"{self.form}", "bold"),
         )
+        periods = Text.assemble(
+            ("Period ending ", "grey70"),
+            (f"{datefmt(self.period_of_report, '%B %d, %Y')}", "bold"),
+            (" filed on ", "grey70"),
+            (f"{datefmt(self.filing_date, '%B %d, %Y')}", "bold"),
+        )
+        aif_info = Text(f"AIF: {self._aif_result[1]}", style="dim")
+
+        panel = Panel(
+            Group(
+                periods,
+                aif_info,
+                Padding(" ", (1, 0, 0, 0)),
+                self.get_structure(),
+                Padding(" ", (1, 0, 0, 0)),
+                self.financials or Text("No financial data available", style="italic"),
+            ),
+            title=title,
+            box=box.ROUNDED,
+        )
+        return panel
 
     def __repr__(self):
         return repr_rich(self.__rich__())
