@@ -567,9 +567,6 @@ class FortyF(CompanyReport):
 
     # -- Display -------------------------------------------------------------
 
-    def __str__(self):
-        return f"FortyF('{self.company}')"
-
     def get_structure(self):
         """Build a tree showing detected AIF sections."""
         tree = Tree("📄 ")

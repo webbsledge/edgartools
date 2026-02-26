@@ -190,10 +190,6 @@ class TestGetItem:
 class TestDisplay:
 
     @pytest.mark.network
-    def test_str(self, shop_forty_f):
-        assert str(shop_forty_f) == "FortyF('SHOPIFY INC.')"
-
-    @pytest.mark.network
     def test_repr_contains_company_and_sections(self, shop_forty_f):
         r = repr(shop_forty_f)
         assert 'SHOPIFY' in r
