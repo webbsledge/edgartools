@@ -2077,7 +2077,7 @@ def generate_rich_representation(xbrl) -> Union[str, 'Panel']:
         }
 
         stmt_table = RichTable(box=None, show_header=False, padding=(0, 2), expand=False)
-        stmt_table.add_column("Label", style=get_style("label"), width=16)
+        stmt_table.add_column("Label", style=get_style("label"), min_width=14, no_wrap=True)
         stmt_table.add_column("Count", style=get_style("value_highlight"), width=5, justify="right")
         stmt_table.add_column("Detail", style=get_style("metadata"), no_wrap=True)
 
