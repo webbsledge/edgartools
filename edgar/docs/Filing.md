@@ -109,7 +109,7 @@ filing = Filing.from_dict(data)
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `reports` | Reports | Report structure from filing summary |
+| `reports` | Reports | Report structure from filing summary (also accessible via `report.reports` on TenK/TenQ/etc.) |
 | `statements` | Statements | Statement structure |
 
 ### Multi-Entity Filings

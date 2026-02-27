@@ -37,7 +37,7 @@ from edgar import Filing, Filings, Company, find, obj
 
 ```
 Company → company.get_financials() → Financials → income/balance/cashflow
-Filing → filing.obj() → TenK/TenQ/EightK
+Filing → filing.obj() → TenK/TenQ/EightK → .reports → Reports
 Filing → filing.xbrl() → XBRL → statements
 Company → company.get_facts() → EntityFacts → Statement
 Filing → filing.document() → Document → extractors

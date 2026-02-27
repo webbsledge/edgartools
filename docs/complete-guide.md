@@ -152,6 +152,9 @@ tenk.financials.cash_flow_statement()
 # Auditor and corporate structure
 tenk.auditor                               # AuditorInfo (name, PCAOB ID, location)
 tenk.subsidiaries                          # SubsidiaryList from Exhibit 21
+
+# XBRL report pages (statements, notes, details)
+tenk.reports                               # Reports from FilingSummary.xml
 ```
 
 EdgarTools provides typed data objects for 17+ filing types including 10-K, 10-Q, 8-K, 13F, Form 4, DEF 14A, N-PORT, N-MFP, Form D, Form C, and more. See the full list in the [Filing Types](data-objects.md) documentation.

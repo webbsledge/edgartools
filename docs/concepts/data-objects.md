@@ -100,7 +100,7 @@ These strategies are applied automatically based on the content being accessed.
 
 Across all Data Objects, you'll find these common patterns:
 
-1. **Property Access**: Access filing sections or data through properties (e.g., `tenk.risk_factors`, `tenk.auditor`, `tenk.subsidiaries`)
+1. **Property Access**: Access filing sections or data through properties (e.g., `tenk.risk_factors`, `tenk.auditor`, `tenk.subsidiaries`, `tenk.reports`)
 2. **Method Calls**: Perform operations on the data (e.g., `form4.get_net_shares_traded()`)
 3. **Dictionary-Like Access**: Access specific items by key (e.g., `eightk["Item 2.01"]`)
 4. **Iteration**: Iterate over collections within the filing (e.g., `for holding in thirteen_f.infotable`)
@@ -260,7 +260,7 @@ for section_name in sections:
 Choose the most specific Data Object for your needs:
 
 - Use `TenK`/`TenQ` for financial statement analysis
-- Use `TenK` for auditor info (`tenk.auditor`) and subsidiaries (`tenk.subsidiaries`)
+- Use `TenK` for auditor info (`tenk.auditor`), subsidiaries (`tenk.subsidiaries`), and XBRL report pages (`tenk.reports`)
 - Use `EightK` for event monitoring
 - Use `Form4` for insider trading analysis
 - Use `ThirteenF` for fund holdings analysis
