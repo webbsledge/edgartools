@@ -252,6 +252,9 @@ if tenk.financials:
     # Or use direct properties
     income = tenk.income_statement
     balance = tenk.balance_sheet
+
+# XBRL report pages (also available via filing.reports)
+reports = tenk.reports
 ```
 
 **Important:** The base `Filing` class does **not** have a `financials` property. To access financial data:

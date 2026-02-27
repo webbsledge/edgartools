@@ -235,6 +235,7 @@ facts.to_pandas("us-gaap:Revenues")  # Revenue history as DataFrame
 - Smart data objects for each form
 - Automatic HTML to clean text
 - Section extraction (Risk Factors, MD&A)
+- Auditor info and subsidiaries from 10-K
 
 **Performance & Reliability**
 - 10-30x faster than alternatives

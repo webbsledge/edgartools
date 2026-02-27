@@ -327,10 +327,10 @@ Different forms return different object types:
 
 | Form | Object Type | Key Features |
 |------|-------------|--------------|
-| 10-K | TenK | financials, income_statement, balance_sheet |
-| 10-Q | TenQ | financials, income_statement, balance_sheet |
-| 8-K | EightK | items (material events) |
-| 20-F | TwentyF | financials for foreign issuers |
+| 10-K | TenK | financials, income_statement, balance_sheet, auditor, subsidiaries, reports |
+| 10-Q | TenQ | financials, income_statement, balance_sheet, reports |
+| 8-K | EightK | items (material events), reports |
+| 20-F | TwentyF | financials for foreign issuers, reports |
 | 4 | Form4 | insider transactions |
 | 13F-HR | ThirteenF | institutional holdings |
 | SC 13D/G | Schedule13 | beneficial ownership |

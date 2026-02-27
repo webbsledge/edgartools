@@ -29,6 +29,10 @@ patterns:
 
       tenk.items                        # List: ['Item 1', 'Item 1A', 'Item 2', ...]
 
+      tenk.auditor                      # AuditorInfo: .name .firm_id .location .icfr_attestation
+      tenk.subsidiaries                 # SubsidiaryList from EX-21 (TenK only), .to_dataframe()
+      tenk.reports                      # Reports from FilingSummary.xml (statements, notes, details)
+
   - name: 10-Q Sections
     when: Extract quarterly report sections
     code: |
@@ -66,6 +70,9 @@ patterns:
       forty_f.financials                  # Financials object
       forty_f.income_statement            # Income statement
       forty_f.balance_sheet               # Balance sheet
+
+      forty_f.auditor                     # AuditorInfo or None
+      forty_f.reports                     # Reports from FilingSummary.xml
     note: |
       40-F uses NI 51-102 AIF section headings, NOT US "Item 1", "Item 2" numbers.
       Sections are detected by regex; not all sections appear in every filing.

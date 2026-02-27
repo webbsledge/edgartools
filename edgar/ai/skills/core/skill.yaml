@@ -40,6 +40,7 @@ patterns:
     when: After selecting a filing
     code: |
       report = filing.obj()               # TenK, TenQ, EightK, etc.
+      report.reports                      # XBRL viewer pages (statements, notes, details)
       xbrl = filing.xbrl()                # XBRL data (or None)
       doc = filing.document()             # Primary document text
       attachments = filing.attachments    # All exhibits
@@ -150,7 +151,7 @@ handoffs:
   - to: financials
     when: Deep financial analysis, multi-period comparison, ratios
   - to: reports
-    when: Report sections (MD&A, risk factors, Item 1-8), TenK/TenQ/EightK/FortyF objects
+    when: Report sections (MD&A, risk factors, Item 1-8), TenK/TenQ/EightK/FortyF objects, auditor info, subsidiaries
   - to: holdings
     when: 13F filings, portfolio analysis, institutional holdings
   - to: ownership

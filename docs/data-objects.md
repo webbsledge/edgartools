@@ -22,6 +22,9 @@ Read a company's financials, risk factors, and business description.
 tenk = filing.obj()                        # TenK or TenQ
 tenk.income_statement                      # formatted financial statement
 tenk.risk_factors                          # full section text
+tenk.auditor                               # auditor name, PCAOB ID, location
+tenk.subsidiaries                          # subsidiaries from Exhibit 21 (10-K only)
+tenk.reports                               # XBRL viewer pages (statements, notes, details)
 ```
 
 [:octicons-arrow-right-24: Annual & Quarterly Reports](concepts/data-objects.md)
