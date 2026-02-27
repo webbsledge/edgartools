@@ -150,7 +150,7 @@ handoffs:
   - to: financials
     when: Deep financial analysis, multi-period comparison, ratios
   - to: reports
-    when: Report sections (MD&A, risk factors, Item 1-8), TenK/TenQ/EightK/FortyF objects
+    when: Report sections (MD&A, risk factors, Item 1-8), TenK/TenQ/EightK/FortyF objects, auditor info, subsidiaries
   - to: holdings
     when: 13F filings, portfolio analysis, institutional holdings
   - to: ownership

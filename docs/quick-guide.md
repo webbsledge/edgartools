@@ -145,6 +145,19 @@ Common EdgarTools operations at a glance. For a step-by-step introduction, see t
 | 🌐 Open attachment in browser | `attachment.open()`                  |
 | ⬇️ Download an attachment     | `content = attachment.download()`    |
 
+### 10-K Annual Report data 📊
+
+> See also: [Working with Filings](guides/working-with-filing.md)
+
+|                                          | Code                                                          |
+|------------------------------------------|---------------------------------------------------------------|
+| 📄 Get 10-K as data object              | `tenk = company.get_filings(form="10-K").latest().obj()`      |
+| 🏢 Get auditor information              | `tenk.auditor`                                                |
+| 🏢 Get auditor name                     | `tenk.auditor.name`                                           |
+| 🔢 Get PCAOB firm ID                    | `tenk.auditor.firm_id`                                        |
+| 🏗️ Get subsidiaries                     | `tenk.subsidiaries`                                           |
+| 🐼 Subsidiaries as DataFrame            | `tenk.subsidiaries.to_dataframe()`                            |
+
 ### Proxy statements (executive compensation) 💼
 
 > See also: [Proxy Statements Guide](guides/proxystatement-data-object-guide.md)

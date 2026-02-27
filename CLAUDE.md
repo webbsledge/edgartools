@@ -17,7 +17,7 @@ Python library for SEC Edgar filings analysis.
 | XBRL parsing | `edgar/xbrl/xbrl.py` | `XBRL` |
 | Statements | `edgar/xbrl/statements.py` | `Statement` |
 | Documents | `edgar/documents/` | `Document`, `HTMLParser` |
-| Reports (10-K/Q/8-K) | `edgar/company_reports.py` | `TenK`, `TenQ`, `EightK` |
+| Reports (10-K/Q/8-K) | `edgar/company_reports/` | `TenK`, `TenQ`, `EightK`, `AuditorInfo`, `SubsidiaryList` |
 | Reference data | `edgar/reference/` | Tickers, forms |
 
 ## Entry Points

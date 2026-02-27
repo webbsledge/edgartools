@@ -177,6 +177,8 @@ if tenk:
 | Item 3 | `tenk['Item 3']` | Legal proceedings |
 | Item 7 | `tenk.management_discussion` | MD&A financial analysis |
 | Item 7A | `tenk['Item 7A']` | Quantitative market risk |
+| — | `tenk.auditor` | Auditor name, PCAOB ID, location, ICFR attestation |
+| EX-21 | `tenk.subsidiaries` | List of subsidiaries with jurisdiction |
 
 ### Code Example
 ```python

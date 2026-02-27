@@ -64,6 +64,21 @@ sharp_edges:
       else:
           print("No capital structure section in this AIF")
 
+  - id: auditor-may-be-none
+    summary: auditor is None on 10-Q and filings without XBRL DEI data
+    severity: medium
+    solution: |
+      if tenk.auditor:
+          print(tenk.auditor.name, tenk.auditor.firm_id)
+
+  - id: subsidiaries-only-tenk
+    summary: subsidiaries is TenK only; None if no EX-21 exhibit
+    severity: medium
+    solution: |
+      subs = tenk.subsidiaries   # SubsidiaryList or None
+      if subs:
+          df = subs.to_dataframe()
+
   - id: eightk-items-different
     summary: 8-K items indicate events, detail often in exhibits
     severity: low

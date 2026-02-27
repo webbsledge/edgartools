@@ -103,6 +103,16 @@ tenk = Company("NVDA").latest("10-K")
 print(tenk['Item 1'].text[:2000])
 ```
 
+### Get auditor and subsidiaries from a 10-K
+
+```python
+from edgar import Company
+
+tenk = Company("AAPL").get_filings(form="10-K").latest().obj()
+print(tenk.auditor)          # Ernst & Young LLP, PCAOB ID 42
+print(tenk.subsidiaries)     # SubsidiaryList from Exhibit 21
+```
+
 ### Track insider buying
 
 ```python

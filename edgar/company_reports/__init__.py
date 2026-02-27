@@ -13,6 +13,7 @@ from edgar.company_reports._structures import (
     is_valid_item_for_filing,
 )
 from edgar.company_reports.current_report import CurrentReport, EightK, SixK
+from edgar.company_reports.auditor import AuditorInfo
 from edgar.company_reports.press_release import PressRelease, PressReleases
 from edgar.company_reports.subsidiaries import Subsidiary, SubsidiaryList
 
@@ -40,6 +41,8 @@ __all__ = [
     'CurrentReport',
     'EightK',
     'SixK',
+    # Auditor
+    'AuditorInfo',
     # Press releases
     'PressRelease',
     'PressReleases',

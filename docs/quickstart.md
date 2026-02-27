@@ -140,6 +140,8 @@ Company("AAPL")                        # Start here — look up a company
   │     ├── .head(5)                     #   See the first 5
   │     ├── .latest()                    #   Get the most recent one
   │     └── [0].obj()                    #   Parse into a data object (TenK, etc.)
+  │           ├── .auditor               #     Auditor name, PCAOB ID, location
+  │           └── .subsidiaries          #     Subsidiaries from Exhibit 21
   │
   └── .get_facts()                       # Historical data (for 4+ years of trends)
         ├── .income_statement()          #   Multi-year income data

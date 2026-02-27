@@ -46,6 +46,14 @@ class CompanyReport:
         return self.financials.cashflow_statement() if self.financials else None
 
     @cached_property
+    def auditor(self):
+        """Auditor information from XBRL DEI facts, if available."""
+        from edgar.company_reports.auditor import extract_auditor_info
+        if self.financials and self.financials.xb:
+            return extract_auditor_info(self.financials.xb)
+        return None
+
+    @cached_property
     def financials(self):
         """Get the financials for this filing"""
         return Financials.extract(self._filing)

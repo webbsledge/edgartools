@@ -327,7 +327,7 @@ Different forms return different object types:
 
 | Form | Object Type | Key Features |
 |------|-------------|--------------|
-| 10-K | TenK | financials, income_statement, balance_sheet |
+| 10-K | TenK | financials, income_statement, balance_sheet, auditor, subsidiaries |
 | 10-Q | TenQ | financials, income_statement, balance_sheet |
 | 8-K | EightK | items (material events) |
 | 20-F | TwentyF | financials for foreign issuers |
