@@ -18,8 +18,10 @@ from edgar.earnings import (
     _classify_statement,
     _detect_table_scale,
     _is_numeric_or_currency,
+    _label_to_concept,
     _merge_currency_symbols,
     _parse_numeric,
+    _parse_period_header,
 )
 
 
@@ -676,3 +678,215 @@ class TestMergeCurrencySymbolsParens:
         merged = _merge_currency_symbols(["$", "(", "0.09", ")"])
         assert len(merged) == 1
         assert _parse_numeric(merged[0]) == -0.09
+
+
+# ── _parse_period_header ──────────────────────────────────────────────────
+
+
+class TestParsePeriodHeader:
+    """Parse column headers into structured period info."""
+
+    def test_three_months_ended(self):
+        result = _parse_period_header("Three Months Ended June 30, 2025")
+        assert result['period_type'] == 'duration'
+        assert result['duration_months'] == 3
+        assert result['period_end'].year == 2025
+        assert result['period_end'].month == 6
+        assert result['period_end'].day == 30
+        assert result['fiscal_period'] == 'Q2'
+        assert result['fiscal_year'] == 2025
+        assert result['period_start'] is not None
+        assert result['period_start'].month == 4
+
+    def test_twelve_months_ended(self):
+        result = _parse_period_header("Twelve Months Ended December 31, 2024")
+        assert result['period_type'] == 'duration'
+        assert result['duration_months'] == 12
+        assert result['fiscal_period'] == 'FY'
+        assert result['period_end'].year == 2024
+        assert result['period_end'].month == 12
+
+    def test_bare_date_instant(self):
+        result = _parse_period_header("December 31, 2024")
+        assert result['period_type'] == 'instant'
+        assert result['period_start'] is None
+        assert result['period_end'].year == 2024
+        assert result['period_end'].month == 12
+        assert result['fiscal_year'] == 2024
+
+    def test_parent_child_format(self):
+        """'Three Months Ended - Dec 27, 2025' → duration, Q4."""
+        result = _parse_period_header("Three Months Ended - Dec 27, 2025")
+        assert result['period_type'] == 'duration'
+        assert result['duration_months'] == 3
+        assert result['period_end'].month == 12
+        assert result['fiscal_period'] == 'Q4'
+
+    def test_fallback_col_0(self):
+        result = _parse_period_header("Col_0")
+        assert result['period_type'] is None
+        assert result['period_end'] is None
+        assert result['fiscal_year'] is None
+
+    def test_year_ended(self):
+        result = _parse_period_header("Year Ended December 31, 2024")
+        assert result['period_type'] == 'duration'
+        assert result['duration_months'] == 12
+        assert result['fiscal_period'] == 'FY'
+
+    def test_quarter_ended(self):
+        result = _parse_period_header("Quarter Ended March 31, 2025")
+        assert result['period_type'] == 'duration'
+        assert result['duration_months'] == 3
+        assert result['fiscal_period'] == 'Q1'
+
+    def test_six_months_ended(self):
+        result = _parse_period_header("Six Months Ended June 30, 2025")
+        assert result['period_type'] == 'duration'
+        assert result['duration_months'] == 6
+        assert result['fiscal_period'] == 'H1'
+
+    def test_empty_string(self):
+        result = _parse_period_header("")
+        assert result['period_type'] is None
+
+
+# ── _label_to_concept ─────────────────────────────────────────────────────
+
+
+class TestLabelToConcept:
+    """Map row labels to XBRL concept names."""
+
+    def test_exact_match(self):
+        """'Revenue' maps to a us-gaap concept."""
+        concept = _label_to_concept("Revenue")
+        assert concept.startswith("us-gaap:")
+        assert "Revenue" in concept or "revenue" in concept.lower()
+
+    def test_case_insensitive(self):
+        """'gross profit' (lowercase) matches 'Gross Profit' entry."""
+        concept = _label_to_concept("gross profit")
+        assert "GrossProfit" in concept
+
+    def test_fallback_pascalcase(self):
+        """Unknown label falls back to PascalCase."""
+        concept = _label_to_concept("Adj. EBITDA")
+        assert concept == "AdjEbitda"
+
+    def test_net_income(self):
+        concept = _label_to_concept("Net Income")
+        assert concept.startswith("us-gaap:")
+
+    def test_earnings_per_share_diluted(self):
+        concept = _label_to_concept("Earnings Per Share (Diluted)")
+        assert concept.startswith("us-gaap:")
+
+
+# ── FinancialTable.to_facts_dataframe ─────────────────────────────────────
+
+
+class TestFinancialTableToFactsDataframe:
+    """FinancialTable.to_facts_dataframe() produces the correct schema."""
+
+    def _make_table(self):
+        """Build a small table with known data for testing."""
+        df = pd.DataFrame({
+            "Three Months Ended June 30, 2025": [100.0, 0.46, 50_000_000.0],
+            "Three Months Ended June 30, 2024": [90.0, 0.40, 48_000_000.0],
+        }, index=[
+            "Revenue",
+            "Diluted earnings per share",
+            "Weighted average diluted shares outstanding",
+        ]).astype(object)
+
+        row_types = {
+            "Revenue": RowType.AMOUNT,
+            "Diluted earnings per share": RowType.PER_SHARE,
+            "Weighted average diluted shares outstanding": RowType.SHARES,
+        }
+        return FinancialTable(
+            dataframe=df,
+            scale=Scale.MILLIONS,
+            statement_type=StatementType.INCOME_STATEMENT,
+            row_types=row_types,
+        )
+
+    def test_schema_columns(self):
+        """Output has all 10 expected columns."""
+        table = self._make_table()
+        facts_df = table.to_facts_dataframe()
+        expected_cols = {
+            'concept', 'label', 'value', 'numeric_value', 'unit',
+            'period_type', 'period_start', 'period_end',
+            'fiscal_year', 'fiscal_period',
+        }
+        assert expected_cols == set(facts_df.columns)
+
+    def test_units_by_row_type(self):
+        """PER_SHARE rows get 'USD/shares', AMOUNT rows get 'USD', SHARES get 'shares'."""
+        table = self._make_table()
+        facts_df = table.to_facts_dataframe()
+
+        revenue_rows = facts_df[facts_df['label'] == 'Revenue']
+        assert all(revenue_rows['unit'] == 'USD')
+
+        eps_rows = facts_df[facts_df['label'] == 'Diluted earnings per share']
+        assert all(eps_rows['unit'] == 'USD/shares')
+
+        shares_rows = facts_df[facts_df['label'] == 'Weighted average diluted shares outstanding']
+        assert all(shares_rows['unit'] == 'shares')
+
+    def test_scaling_applied_to_amounts_only(self):
+        """AMOUNT rows are scaled by millions; PER_SHARE and SHARES rows are not."""
+        table = self._make_table()
+        facts_df = table.to_facts_dataframe()
+
+        # Revenue should be scaled: 100.0 * 1_000_000
+        rev_val = facts_df[
+            (facts_df['label'] == 'Revenue') &
+            (facts_df['fiscal_year'] == 2025)
+        ]['numeric_value'].iloc[0]
+        assert rev_val == 100.0 * 1_000_000
+
+        # EPS should NOT be scaled
+        eps_val = facts_df[
+            (facts_df['label'] == 'Diluted earnings per share') &
+            (facts_df['fiscal_year'] == 2025)
+        ]['numeric_value'].iloc[0]
+        assert eps_val == 0.46
+
+        # Shares should NOT be scaled
+        shares_val = facts_df[
+            (facts_df['label'] == 'Weighted average diluted shares outstanding') &
+            (facts_df['fiscal_year'] == 2025)
+        ]['numeric_value'].iloc[0]
+        assert shares_val == 50_000_000.0
+
+    def test_period_info_populated(self):
+        """Period columns are populated from column headers."""
+        table = self._make_table()
+        facts_df = table.to_facts_dataframe()
+        assert all(facts_df['period_type'] == 'duration')
+        assert set(facts_df['fiscal_year'].unique()) == {2024, 2025}
+        assert all(facts_df['fiscal_period'] == 'Q2')
+
+    def test_empty_table(self):
+        """Empty table returns empty DataFrame with correct columns."""
+        df = pd.DataFrame(columns=["Col_0"]).astype(object)
+        table = FinancialTable(dataframe=df, scale=Scale.UNITS)
+        facts_df = table.to_facts_dataframe()
+        assert facts_df.empty
+        assert 'concept' in facts_df.columns
+
+    def test_non_numeric_rows_skipped(self):
+        """Rows with non-numeric values (like 'N/A') are skipped."""
+        df = pd.DataFrame({
+            "Three Months Ended March 31, 2025": [100.0, "N/A"],
+        }, index=["Revenue", "Some note"]).astype(object)
+        table = FinancialTable(
+            dataframe=df, scale=Scale.UNITS,
+            row_types={"Revenue": RowType.AMOUNT, "Some note": RowType.OTHER},
+        )
+        facts_df = table.to_facts_dataframe()
+        assert len(facts_df) == 1
+        assert facts_df.iloc[0]['label'] == 'Revenue'

@@ -18,13 +18,16 @@ Features:
 - Rich terminal display
 """
 
+import json
 import logging
 import re
 from dataclasses import dataclass, field
+from datetime import date, timedelta
 from enum import Enum
 from functools import cached_property
 from html import escape as html_escape
-from typing import TYPE_CHECKING, List, Optional, Union
+from pathlib import Path
+from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
 import pandas as pd
 
@@ -213,6 +216,206 @@ def _classify_row_type(label: str) -> RowType:
             if pattern in label_lower:
                 return row_type
     return RowType.AMOUNT
+
+
+# ── Period header parsing ──────────────────────────────────────────────────
+
+# Regex for "Three Months Ended June 30, 2025" style headers
+_DURATION_HEADER = re.compile(
+    r'(?:(?P<word>Three|Six|Nine|Twelve)\s+Months|(?P<n>\d+)\s+Months|'
+    r'(?P<qy>Quarter|Year))\s+'
+    r'Ended\s*[-–—]?\s*'
+    r'(?P<month>\w+)\s+(?P<day>\d{1,2}),?\s*(?P<year>\d{4})',
+    re.IGNORECASE,
+)
+
+# Regex for bare date headers like "December 31, 2024"
+_BARE_DATE = re.compile(
+    r'^(?P<month>January|February|March|April|May|June|July|August|September|'
+    r'October|November|December)\s+(?P<day>\d{1,2}),?\s*(?P<year>\d{4})$',
+    re.IGNORECASE,
+)
+
+_MONTH_NUMBERS = {
+    'january': 1, 'february': 2, 'march': 3, 'april': 4,
+    'may': 5, 'june': 6, 'july': 7, 'august': 8,
+    'september': 9, 'october': 10, 'november': 11, 'december': 12,
+    'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4,
+    'jun': 6, 'jul': 7, 'aug': 8, 'sep': 9,
+    'oct': 10, 'nov': 11, 'dec': 12,
+}
+
+_WORD_TO_MONTHS = {
+    'three': 3, 'six': 6, 'nine': 9, 'twelve': 12,
+}
+
+
+def _parse_period_header(header: str) -> Dict[str, object]:
+    """Parse a column header into period components.
+
+    Returns dict with keys: period_type, period_start, period_end,
+    fiscal_year, fiscal_period, duration_months.
+    All values are None if the header cannot be parsed.
+    """
+    empty = {
+        'period_type': None, 'period_start': None, 'period_end': None,
+        'fiscal_year': None, 'fiscal_period': None, 'duration_months': None,
+    }
+
+    header = header.strip()
+    if not header or header.startswith('Col_'):
+        return empty
+
+    # Try duration pattern first
+    m = _DURATION_HEADER.search(header)
+    if m:
+        month_name = m.group('month').lower()
+        month_num = _MONTH_NUMBERS.get(month_name)
+        if month_num is None:
+            return empty
+        day = int(m.group('day'))
+        year = int(m.group('year'))
+        try:
+            period_end = date(year, month_num, day)
+        except ValueError:
+            return empty
+
+        # Determine duration in months
+        word = (m.group('word') or '').lower()
+        qy = (m.group('qy') or '').lower()
+        n_str = m.group('n')
+        if word in _WORD_TO_MONTHS:
+            duration_months = _WORD_TO_MONTHS[word]
+        elif n_str:
+            duration_months = int(n_str)
+        elif qy == 'quarter':
+            duration_months = 3
+        elif qy == 'year':
+            duration_months = 12
+        else:
+            duration_months = 3  # default
+
+        # Compute period_start: go back duration_months, day 1
+        # e.g. 3 months ended June 30 → start April 1
+        start_month = month_num - duration_months + 1
+        start_year = year
+        while start_month <= 0:
+            start_month += 12
+            start_year -= 1
+        period_start = date(start_year, start_month, 1)
+
+        fiscal_year = period_end.year
+        fiscal_period = _duration_to_fiscal_period(duration_months, month_num)
+
+        return {
+            'period_type': 'duration',
+            'period_start': period_start,
+            'period_end': period_end,
+            'fiscal_year': fiscal_year,
+            'fiscal_period': fiscal_period,
+            'duration_months': duration_months,
+        }
+
+    # Try bare date (instant / balance sheet)
+    m = _BARE_DATE.match(header)
+    if m:
+        month_name = m.group('month').lower()
+        month_num = _MONTH_NUMBERS.get(month_name)
+        if month_num is None:
+            return empty
+        day = int(m.group('day'))
+        year = int(m.group('year'))
+        try:
+            period_end = date(year, month_num, day)
+        except ValueError:
+            return empty
+
+        return {
+            'period_type': 'instant',
+            'period_start': None,
+            'period_end': period_end,
+            'fiscal_year': year,
+            'fiscal_period': None,
+            'duration_months': None,
+        }
+
+    return empty
+
+
+def _duration_to_fiscal_period(duration_months: int, end_month: int) -> str:
+    """Map duration and ending month to fiscal period label."""
+    if duration_months >= 12:
+        return 'FY'
+    if duration_months == 3:
+        q_map = {3: 'Q1', 6: 'Q2', 9: 'Q3', 12: 'Q4'}
+        return q_map.get(end_month, f'Q{(end_month - 1) // 3 + 1}')
+    if duration_months == 6:
+        return 'H1' if end_month <= 6 else 'H2'
+    if duration_months == 9:
+        return '9M'
+    return f'{duration_months}M'
+
+
+# ── Label-to-concept mapping ──────────────────────────────────────────────
+
+_CONCEPT_REVERSE_MAP: Optional[Dict[str, str]] = None
+
+
+def _load_concept_reverse_map() -> Dict[str, str]:
+    """Build a reverse lookup from lowercase display label → first XBRL tag."""
+    global _CONCEPT_REVERSE_MAP
+    if _CONCEPT_REVERSE_MAP is not None:
+        return _CONCEPT_REVERSE_MAP
+
+    mapping_path = Path(__file__).parent / 'xbrl' / 'standardization' / 'concept_mappings.json'
+    reverse: Dict[str, str] = {}
+    try:
+        with open(mapping_path) as f:
+            mappings = json.load(f)
+        for display_label, tags in mappings.items():
+            if display_label.startswith('_'):
+                continue
+            if isinstance(tags, list) and tags:
+                # Use colon notation: "us-gaap_Revenue" → "us-gaap:Revenue"
+                tag = tags[0].replace('_', ':', 1)
+                key = display_label.strip().lower()
+                if key not in reverse:
+                    reverse[key] = tag
+    except (OSError, json.JSONDecodeError):
+        pass
+
+    _CONCEPT_REVERSE_MAP = reverse
+    return reverse
+
+
+def _label_to_concept(label: str) -> str:
+    """Map a row label to an XBRL concept name.
+
+    Tries exact case-insensitive match against concept_mappings.json.
+    Falls back to a PascalCase normalized form of the label.
+    """
+    reverse = _load_concept_reverse_map()
+    key = label.strip().lower()
+
+    # Exact match
+    if key in reverse:
+        return reverse[key]
+
+    # Fallback: normalize to PascalCase
+    # "Net sales" → "NetSales", "Adj. EBITDA" → "AdjEbitda"
+    words = re.sub(r'[^a-zA-Z0-9\s]', '', label).split()
+    return ''.join(w.capitalize() for w in words) if words else label
+
+
+# ── Unit mapping from RowType ─────────────────────────────────────────────
+
+_ROW_TYPE_UNITS = {
+    RowType.AMOUNT: 'USD',
+    RowType.PER_SHARE: 'USD/shares',
+    RowType.SHARES: 'shares',
+    RowType.PERCENTAGE: 'pure',
+    RowType.OTHER: 'USD',
+}
 
 
 @dataclass
@@ -452,6 +655,68 @@ class FinancialTable:
         """
         df = self._display_dataframe()
         return df.to_csv()
+
+    # =========================================================================
+    # Facts DataFrame (Use Case 4: Merge with XBRL facts)
+    # =========================================================================
+
+    def to_facts_dataframe(self) -> pd.DataFrame:
+        """Convert table to a facts DataFrame matching the EntityFacts.to_dataframe() schema.
+
+        Each row × column cell becomes one record with columns:
+        concept, label, value, numeric_value, unit, period_type,
+        period_start, period_end, fiscal_year, fiscal_period.
+
+        AMOUNT rows are scaled by the table's scale factor; PER_SHARE,
+        SHARES, and PERCENTAGE rows are left unscaled.
+        """
+        records = []
+        df = self.dataframe
+
+        for col in df.columns:
+            period_info = _parse_period_header(str(col))
+
+            for idx_label in df.index:
+                label = str(idx_label)
+                row_type = self.get_row_type(label)
+
+                raw_val = df.at[idx_label, col]
+                # Skip non-numeric cells (headers, subtitles, NaN)
+                numeric_val = None
+                if isinstance(raw_val, (int, float)):
+                    numeric_val = float(raw_val)
+                elif raw_val is not None:
+                    try:
+                        numeric_val = float(raw_val)
+                    except (ValueError, TypeError):
+                        pass
+                if numeric_val is None:
+                    continue
+
+                # Apply scaling only to AMOUNT rows
+                if row_type == RowType.AMOUNT and self.scale != Scale.UNITS:
+                    numeric_val = numeric_val * self.scale.value
+
+                records.append({
+                    'concept': _label_to_concept(label),
+                    'label': label,
+                    'value': str(raw_val),
+                    'numeric_value': numeric_val,
+                    'unit': _ROW_TYPE_UNITS.get(row_type, 'USD'),
+                    'period_type': period_info['period_type'],
+                    'period_start': period_info['period_start'],
+                    'period_end': period_info['period_end'],
+                    'fiscal_year': period_info['fiscal_year'],
+                    'fiscal_period': period_info['fiscal_period'],
+                })
+
+        if not records:
+            return pd.DataFrame(columns=[
+                'concept', 'label', 'value', 'numeric_value', 'unit',
+                'period_type', 'period_start', 'period_end',
+                'fiscal_year', 'fiscal_period',
+            ])
+        return pd.DataFrame(records)
 
     # =========================================================================
     # AI Cleanup Support (Use Case 3: Standardization)
@@ -759,6 +1024,27 @@ class EarningsRelease:
             if t.statement_type == StatementType.GUIDANCE:
                 return t
         return None
+
+    def to_facts_dataframe(self) -> pd.DataFrame:
+        """Combine all financial tables into a single facts DataFrame.
+
+        Returns a DataFrame matching the EntityFacts.to_dataframe() schema
+        with an extra ``source_statement`` column for disambiguation.
+        """
+        frames = []
+        for table in self.financial_tables:
+            df = table.to_facts_dataframe()
+            if not df.empty:
+                df['source_statement'] = table.statement_type.value
+                frames.append(df)
+        if not frames:
+            cols = [
+                'concept', 'label', 'value', 'numeric_value', 'unit',
+                'period_type', 'period_start', 'period_end',
+                'fiscal_year', 'fiscal_period', 'source_statement',
+            ]
+            return pd.DataFrame(columns=cols)
+        return pd.concat(frames, ignore_index=True)
 
     def _extract_tables(self) -> List[FinancialTable]:
         """Extract and classify all tables from the document."""
