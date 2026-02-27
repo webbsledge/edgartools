@@ -293,6 +293,25 @@ class TenK(CompanyReport):
         return self['Item 10']
 
     @cached_property
+    def subsidiaries(self):
+        """Subsidiaries from Exhibit 21, if present.
+
+        Returns SubsidiaryList if an EX-21 attachment exists (may be empty),
+        or None if the filing has no EX-21 exhibit.
+        """
+        from edgar.company_reports.subsidiaries import SubsidiaryList, parse_subsidiaries
+
+        for att in self._filing.attachments:
+            doc_type = att.document_type or ''
+            if doc_type.startswith('EX-21'):
+                content = att.content
+                if not content:
+                    continue
+                subs = parse_subsidiaries(content)
+                return SubsidiaryList(subs)
+        return None
+
+    @cached_property
     def chunked_document(self):
         return ChunkedDocument(self._filing.html(), prefix_src=self._filing.base_dir)
 

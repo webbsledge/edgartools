@@ -14,6 +14,7 @@ from edgar.company_reports._structures import (
 )
 from edgar.company_reports.current_report import CurrentReport, EightK, SixK
 from edgar.company_reports.press_release import PressRelease, PressReleases
+from edgar.company_reports.subsidiaries import Subsidiary, SubsidiaryList
 
 # Filing classes
 from edgar.company_reports.ten_k import TenK
@@ -42,4 +43,7 @@ __all__ = [
     # Press releases
     'PressRelease',
     'PressReleases',
+    # Subsidiaries
+    'Subsidiary',
+    'SubsidiaryList',
 ]
