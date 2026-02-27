@@ -1,7 +1,10 @@
 """Base class for company report filings."""
 import warnings
 from functools import cached_property
-from typing import List
+from typing import List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from edgar.sgml.filing_summary import Reports
 
 from rich import print
 from rich.console import Group, Text
@@ -52,6 +55,11 @@ class CompanyReport:
         if self.financials and self.financials.xb:
             return extract_auditor_info(self.financials.xb)
         return None
+
+    @cached_property
+    def reports(self) -> Optional['Reports']:
+        """The XBRL report pages from FilingSummary.xml (statements, notes, tables, details)."""
+        return self._filing.reports
 
     @cached_property
     def financials(self):
