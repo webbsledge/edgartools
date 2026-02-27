@@ -340,6 +340,86 @@ class TestClassifyStatement:
         ])
         assert _classify_statement(node, df) == StatementType.INCOME_STATEMENT
 
+    def test_strong_keyword_single_match(self):
+        """A single strong keyword like 'gross profit' is sufficient for classification."""
+        node = _MockTableNode(
+            rows=[
+                _MockRow(cells=[_MockCell("Revenue")]),
+                _MockRow(cells=[_MockCell("Cost of revenue")]),
+                _MockRow(cells=[_MockCell("Gross profit")]),
+            ],
+        )
+        df = pd.DataFrame({"A": [1, 2, 3]}, index=[
+            "Revenue", "Cost of revenue", "Gross profit",
+        ])
+        assert _classify_statement(node, df) == StatementType.INCOME_STATEMENT
+
+    def test_single_weak_keyword_not_sufficient(self):
+        """A single weak keyword like 'revenue' alone is NOT sufficient."""
+        node = _MockTableNode(
+            rows=[
+                _MockRow(cells=[_MockCell("Revenue")]),
+                _MockRow(cells=[_MockCell("Headcount")]),
+            ],
+        )
+        df = pd.DataFrame({"A": [1, 2]}, index=[
+            "Revenue", "Headcount",
+        ])
+        assert _classify_statement(node, df) == StatementType.UNKNOWN
+
+    def test_two_weak_keywords_sufficient(self):
+        """Two weak keywords ('revenue' + 'net loss') are sufficient."""
+        node = _MockTableNode(
+            rows=[
+                _MockRow(cells=[_MockCell("Revenue")]),
+                _MockRow(cells=[_MockCell("Net Loss")]),
+                _MockRow(cells=[_MockCell("Adjusted EBITDA")]),
+            ],
+        )
+        df = pd.DataFrame({"A": [1, 2, 3]}, index=[
+            "Revenue", "Net Loss", "Adjusted EBITDA",
+        ])
+        assert _classify_statement(node, df) == StatementType.INCOME_STATEMENT
+
+    def test_bank_single_keyword_with_provision(self):
+        """Bank tables: 'net interest income' + 'provision for credit losses' → INCOME_STATEMENT."""
+        node = _MockTableNode(
+            rows=[
+                _MockRow(cells=[_MockCell("Net interest income")]),
+                _MockRow(cells=[_MockCell("Provision for credit losses")]),
+                _MockRow(cells=[_MockCell("Service charges")]),
+            ],
+        )
+        df = pd.DataFrame({"A": [1, 2, 3]}, index=[
+            "Net interest income", "Provision for credit losses", "Service charges",
+        ])
+        assert _classify_statement(node, df) == StatementType.INCOME_STATEMENT
+
+    def test_title_consolidated_results(self):
+        """Title 'Consolidated Results' → INCOME_STATEMENT."""
+        node = _MockTableNode(
+            headers=[[_MockCell("Consolidated Results")]],
+            rows=[_MockRow(cells=[_MockCell("Revenue")])],
+        )
+        df = pd.DataFrame({"A": [1]}, index=["Revenue"])
+        assert _classify_statement(node, df) == StatementType.INCOME_STATEMENT
+
+    def test_highest_score_wins(self):
+        """When multiple statement types match, the highest score wins."""
+        node = _MockTableNode(
+            rows=[
+                _MockRow(cells=[_MockCell("Net income")]),
+                _MockRow(cells=[_MockCell("Gross profit")]),
+                _MockRow(cells=[_MockCell("Operating income")]),
+                _MockRow(cells=[_MockCell("Total assets")]),
+            ],
+        )
+        df = pd.DataFrame({"A": [1, 2, 3, 4]}, index=[
+            "Net income", "Gross profit", "Operating income", "Total assets",
+        ])
+        # Income statement has more matches (including strong keywords)
+        assert _classify_statement(node, df) == StatementType.INCOME_STATEMENT
+
     def test_unknown_fallback(self):
         """Table with no matching content → UNKNOWN."""
         node = _MockTableNode(

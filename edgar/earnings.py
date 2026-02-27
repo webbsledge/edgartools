@@ -105,6 +105,26 @@ class RowType(Enum):
 
 
 # Keywords for statement classification
+# "Strong" keywords score 2 (single match is sufficient for classification).
+# Regular keywords score 1 (need 2+ matches). Total score >= 2 triggers match.
+_STRONG_KEYWORDS = {
+    StatementType.INCOME_STATEMENT: [
+        'gross profit', 'operating income', 'operating loss',
+        'income before taxes', 'income before provision',
+        'income from operations', 'loss from operations',
+        'provision for income taxes', 'income tax expense',
+        'diluted earnings per share', 'diluted loss per share',
+    ],
+    StatementType.BALANCE_SHEET: [
+        'total assets', 'total liabilities',
+        "stockholders' equity", "shareholders' equity",
+    ],
+    StatementType.CASH_FLOW: [
+        'cash flows from operating', 'cash flows from investing',
+        'cash flows from financing',
+    ],
+}
+
 _STATEMENT_KEYWORDS = {
     StatementType.INCOME_STATEMENT: [
         'net revenue', 'gross profit', 'operating income', 'cost of sales',
@@ -112,7 +132,12 @@ _STATEMENT_KEYWORDS = {
         'net sales', 'total revenues', 'total revenue', 'cost of revenue',
         'cost of goods sold', 'income from operations', 'net income',
         'net interest income', 'total interest income', 'income tax expense',
-        'selling, general',
+        'selling, general', 'revenue', 'net loss', 'operating loss',
+        'diluted earnings', 'basic earnings', 'earnings per share',
+        'loss per share', 'interest expense', 'noninterest income',
+        'noninterest expense', 'loss from operations', 'loss before',
+        'pretax income', 'pre-tax income', 'income before provision',
+        'provision for credit', 'provision for income',
     ],
     StatementType.BALANCE_SHEET: [
         'total assets', 'total liabilities', 'stockholders', 'current assets',
@@ -152,6 +177,7 @@ _TITLE_PATTERNS = {
         'statement of operations', 'statement of income', 'statement of earnings',
         'results of operations', 'statements of operations', 'statements of income',
         'statements of earnings', 'income statement', 'profit and loss',
+        'consolidated results', 'summary of operations', 'operating results',
     ],
     StatementType.BALANCE_SHEET: [
         'balance sheet', 'financial position', 'financial condition',
@@ -933,7 +959,7 @@ def _classify_statement(table_node, df: pd.DataFrame) -> StatementType:
 
     # 2. Keyword matching on row labels (expanded range)
     labels = []
-    for row in table_node.rows[:15]:
+    for row in table_node.rows[:20]:
         for cell in row.cells:
             content = (cell.content or "").strip()
             if content and len(content) > 3:
@@ -941,14 +967,25 @@ def _classify_statement(table_node, df: pd.DataFrame) -> StatementType:
                 break
 
     if hasattr(df, 'index'):
-        labels.extend([str(x).lower() for x in df.index[:15]])
+        labels.extend([str(x).lower() for x in df.index[:20]])
 
     labels_text = ' '.join(labels)
 
+    # Weighted scoring: strong keywords score 2, regular score 1. Threshold = 2.
+    best_type = None
+    best_score = 0
     for stmt_type, keywords in _STATEMENT_KEYWORDS.items():
-        matches = sum(1 for kw in keywords if kw in labels_text)
-        if matches >= 2:
-            return stmt_type
+        strong = _STRONG_KEYWORDS.get(stmt_type, [])
+        score = 0
+        for kw in keywords:
+            if kw in labels_text:
+                score += 2 if kw in strong else 1
+        if score >= 2 and score > best_score:
+            best_score = score
+            best_type = stmt_type
+
+    if best_type is not None:
+        return best_type
 
     for kw in _STATEMENT_KEYWORDS[StatementType.DEFINITIONS]:
         if kw in labels_text:
