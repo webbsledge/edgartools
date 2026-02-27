@@ -45,6 +45,7 @@ from edgar.filesystem import is_cloud_storage_enabled, sync_to_cloud, use_cloud_
 from edgar.financials import Financials, MultiFinancials
 from edgar.funds import FundClass, FundCompany, FundSeries, find_fund
 from edgar.funds.ncen import NCEN_FORMS, FundCensus
+from edgar.funds.ncsr import NCSR_FORMS, FundShareholderReport
 from edgar.funds.nmfp3 import MONEY_MARKET_FORMS, NMFP2_FORMS, NMFP3_FORMS, MoneyMarketFund
 from edgar.funds.reports import NPORT_FORMS, FundReport
 from edgar.bdc import BDCEntities, BDCEntity, get_bdc_list, get_active_bdc_ciks, is_bdc_cik
@@ -216,6 +217,8 @@ def get_obj_info(form: str) -> tuple[bool, Optional[str], Optional[str]]:
         'N-MFP2': ('MoneyMarketFund', 'money market fund portfolio holdings'),
         'N-MFP3': ('MoneyMarketFund', 'money market fund portfolio holdings'),
         'N-CEN': ('FundCensus', 'registered investment company annual census'),
+        'N-CSR': ('FundShareholderReport', 'fund shareholder report'),
+        'N-CSRS': ('FundShareholderReport', 'fund shareholder report'),
         'N-PX': ('NPX', 'annual proxy voting record'),
         'DEF 14A': ('ProxyStatement', 'proxy statement with executive compensation'),
         'DEFA14A': ('ProxyStatement', 'additional proxy soliciting materials'),
@@ -306,6 +309,9 @@ def obj(sec_filing: Filing) -> Optional[object]:
 
     elif matches_form(sec_filing, NCEN_FORMS):
         return FundCensus.from_filing(sec_filing)
+
+    elif matches_form(sec_filing, NCSR_FORMS):
+        return FundShareholderReport.from_filing(sec_filing)
 
     elif matches_form(sec_filing, MONEY_MARKET_FORMS):
         return MoneyMarketFund.from_filing(sec_filing)
