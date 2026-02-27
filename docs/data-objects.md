@@ -140,6 +140,20 @@ form144.securities                         # security details
 
 ---
 
+## Fund Shareholder Reports (N-CSR / N-CSRS)
+
+Parse certified annual and semiannual shareholder reports with expense ratios, performance data, and share class details.
+
+```python
+report = filing.obj()                      # FundShareholderReport
+report.expense_data()                      # expense ratios per share class
+report.performance_data()                  # annual returns per share class
+```
+
+[:octicons-arrow-right-24: Fund Shareholder Reports guide](guides/fundshareholderreport-data-object-guide.md)
+
+---
+
 ## Fund Voting Records (N-PX)
 
 See how mutual funds voted on shareholder proposals.
