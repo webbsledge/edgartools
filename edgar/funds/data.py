@@ -32,7 +32,6 @@ log = logging.getLogger(__name__)
 # These replace the legacy module dependencies
 
 # URL constants for fund searches
-fund_series_search_url = "https://www.sec.gov/cgi-bin/series?company="
 fund_class_or_series_search_url = "https://www.sec.gov/cgi-bin/browse-edgar?CIK={}"
 fund_series_direct_url = "https://www.sec.gov/cgi-bin/browse-edgar?CIK={}&scd=series"
 
@@ -400,13 +399,110 @@ def direct_get_fund_with_filings(contract_or_series_id: str):
         log.warning("Error retrieving fund information for %s: %s", contract_or_series_id, e)
         return None
 
+def _resolve_company_cik(identifier: str) -> Optional[tuple]:
+    """
+    Resolve a fund identifier (ticker, series ID, or class ID) to a company CIK and name
+    using the SEC's browse-edgar endpoint.
+
+    Returns:
+        Tuple of (cik, company_name) or None if not found
+    """
+    resolve_url = (
+        f"https://www.sec.gov/cgi-bin/browse-edgar?"
+        f"company=&CIK={identifier}&type=&dateb=&owner=include&count=1"
+        f"&search_text=&action=getcompany"
+    )
+    try:
+        html = download_text(resolve_url)
+        soup = BeautifulSoup(html, "html.parser")
+        tag = soup.find('span', class_='companyName')
+        if not tag:
+            return None
+        company_name = tag.text.split('CIK')[0].strip()
+        cik_link = tag.find('a')
+        if not cik_link:
+            return None
+        cik = cik_link.text.split(' ')[0].strip()
+        return cik, company_name
+    except Exception as e:
+        log.warning("Error resolving fund identifier %s: %s", identifier, e)
+        return None
+
+
+def _parse_series_table(html: str) -> tuple:
+    """
+    Parse the browse-edgar series listing page (scd=series) into structured data.
+
+    Returns:
+        Tuple of (company_cik, company_name, series_list) where series_list is a list of dicts:
+        [{'series_id': str, 'series_name': str, 'classes': [{'class_id': str, 'class_name': str, 'ticker': str}]}]
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    tables = soup.find_all("table")
+    if not tables:
+        return None, None, []
+
+    table = tables[0]
+    rows = table.find_all('tr')
+
+    company_cik = None
+    company_name = None
+    series_list = []
+    current_series = None
+
+    for row in rows:
+        cells = row.find_all('td')
+        num_cells = len(cells)
+
+        # Skip header rows (0-2) and the large summary row (484+ cells)
+        if num_cells < 2 or num_cells > 10:
+            continue
+
+        # Company row: 2 cells with CIK link + company name link
+        if num_cells == 2:
+            links = [a.text.strip() for a in cells[0].find_all('a')]
+            if links and re.match(r'^0\d{9}$', links[0]):
+                company_cik = links[0]
+                name_links = [a.text.strip() for a in cells[1].find_all('a')]
+                company_name = name_links[0] if name_links else cells[1].get_text(strip=True)
+
+        # Series row: 3 cells — cell[1] has series ID, cell[2] has series name
+        elif num_cells == 3:
+            links_1 = [a.text.strip() for a in cells[1].find_all('a')]
+            if links_1 and re.match(r'^S\d+$', links_1[0]):
+                series_id = links_1[0]
+                name_links = [a.text.strip() for a in cells[2].find_all('a')]
+                series_name = name_links[0] if name_links else cells[2].get_text(strip=True)
+                current_series = {
+                    'series_id': series_id,
+                    'series_name': series_name,
+                    'classes': []
+                }
+                series_list.append(current_series)
+
+        # Class row: 4-5 cells — cell[2] has class ID, cell[3] has name, cell[4] has ticker
+        elif num_cells in (4, 5) and current_series is not None:
+            links_2 = [a.text.strip() for a in cells[2].find_all('a')]
+            if links_2 and re.match(r'^C\d+$', links_2[0]):
+                class_id = links_2[0]
+                class_name = cells[3].get_text(strip=True)
+                ticker = cells[4].get_text(strip=True) if num_cells == 5 else ""
+                current_series['classes'].append({
+                    'class_id': class_id,
+                    'class_name': class_name,
+                    'ticker': ticker
+                })
+
+    return company_cik, company_name, series_list
+
+
 @lru_cache(maxsize=16)
 def get_fund_object(identifier: str) -> Optional[Union[FundCompany, FundSeries, FundClass]]:
     """
-    Get a Fund related object by it's identifier.
+    Get a Fund related object by its identifier.
 
     Args:
-        identifier: A CIK, a series  id (e.g. 'S000001234') or class id or Fund ticker (e.g. 'VFINX')
+        identifier: A CIK, a series id (e.g. 'S000001234') or class id or Fund ticker (e.g. 'VFINX')
 
     Returns:
         A FundCompany or FundSeries or FundClass
@@ -414,61 +510,72 @@ def get_fund_object(identifier: str) -> Optional[Union[FundCompany, FundSeries, 
 
     if re.match(r'^[CS]\d+$', identifier):
         identifier_type = 'Series' if identifier.startswith('S') else 'Class'
-        fund_search_url = fund_series_search_url + f"&CIK={identifier}"
     elif re.match(r"^[A-Z]{4}X$", identifier):
         identifier_type = 'Class'
-        fund_search_url = fund_series_search_url + f"&ticker={identifier}"
     elif re.match(r"^0\d{9}$", identifier):
         identifier_type = 'FundCompany'
-        fund_search_url = fund_series_search_url + f"&CIK={identifier}"
     else:
         log.warning("Invalid fund identifier %s", identifier)
         return None
 
-    # Download the fund page
-    fund_text = download_text(fund_search_url)
+    # Step 1: Resolve identifier to company CIK
+    if identifier_type == 'FundCompany':
+        company_cik = identifier
+        company_name = None
+    else:
+        result = _resolve_company_cik(identifier)
+        if not result:
+            log.warning("Could not resolve fund identifier %s", identifier)
+            return None
+        company_cik, company_name = result
 
-    soup = BeautifulSoup(fund_text, "html.parser")
-    if 'To retrieve filings, click on the CIK' not in soup.text:
+    # Step 2: Fetch and parse the series listing page
+    series_url = fund_series_direct_url.format(company_cik)
+    try:
+        series_html = download_text(series_url)
+    except Exception as e:
+        log.warning("Error fetching series listing for %s: %s", company_cik, e)
         return None
 
-    tables = soup.find_all("table")
+    parsed_cik, parsed_name, series_data = _parse_series_table(series_html)
+    if company_name is None:
+        company_name = parsed_name
 
-     # The fund table is the 6th table on the page
-    if len(tables) < 6:
-        log.warning("Expected fund table not found for %s", identifier)
-        return None
-
-    fund_table = tables[5]
-
+    # Step 3: Build the object hierarchy
     all_series = []
-    fund_company:Optional[FundCompany] = None
+    fund_company = FundCompany(cik_or_identifier=company_cik, fund_name=company_name, all_series=all_series)
 
-    current_series:Optional[FundSeries] = None
-    current_class:Optional[FundClass] = None
-    for tr in fund_table.find_all('tr')[4:]:  # Skip the first 4 rows as they contain headers
-        row_data = [td.get_text().strip() for td in tr.find_all('td') if td.get_text().strip()]
+    target_series = None
+    target_class = None
 
-        if not row_data:
-            continue
-        if re.match(r'^0\d{9}$', row_data[0]):
-            fund_company = FundCompany(cik_or_identifier=row_data[0], fund_name=row_data[1], all_series=all_series)
-        elif re.match(r'^S\d+$', row_data[0]):
-            current_series = FundSeries(series_id=row_data[0], name=row_data[1], fund_company=fund_company)
-            fund_company.all_series.append(current_series)
-        elif re.match(r'^C\d+$', row_data[0]):
-            class_id, class_name = row_data[0], row_data[1]
-            ticker = row_data[2] if len(row_data) > 2 else None
-            current_class = FundClass(class_id=class_id, name=class_name, ticker=ticker)
+    for s in series_data:
+        current_series = FundSeries(series_id=s['series_id'], name=s['series_name'], fund_company=fund_company)
+        fund_company.all_series.append(current_series)
+
+        for c in s.get('classes', []):
+            ticker = c.get('ticker') or None
+            current_class = FundClass(class_id=c['class_id'], name=c['class_name'], ticker=ticker)
             current_class.series = current_series
             current_series.fund_classes.append(current_class)
 
+            # Track the target class for class/ticker lookups
+            if identifier_type == 'Class':
+                if identifier.startswith('C') and current_class.class_id == identifier:
+                    target_class = current_class
+                elif not identifier.startswith('C') and current_class.ticker == identifier:
+                    target_class = current_class
+
+        # Track the target series
+        if identifier_type == 'Series' and current_series.series_id == identifier:
+            target_series = current_series
+
+    # Step 4: Return the appropriate object
     if identifier_type == "FundCompany":
         return fund_company
     elif identifier_type == "Series":
-        return current_series
+        return target_series
     elif identifier_type == "Class":
-        return current_class
+        return target_class
 
 
 def is_fund_ticker(identifier: str) -> bool:
