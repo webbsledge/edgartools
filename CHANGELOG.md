@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.19.0] - 2026-02-28
+
+### Added
+
+- **FundShareholderReport Data Object (N-CSR/N-CSRS)** — Parse fund shareholder reports into structured data ([099d09d](https://github.com/dgunning/edgartools/commit/099d09d))
+
+- **EX-21 Subsidiaries Parser** for 10-K filings — Extract subsidiary lists from Exhibit 21 ([bea2632](https://github.com/dgunning/edgartools/commit/bea2632))
+
+- **Auditor Property on CompanyReport** — Access auditor information directly from report objects ([6174620](https://github.com/dgunning/edgartools/commit/6174620))
+
+- **Reports Property on CompanyReport** — Access XBRL viewer pages from report objects ([63953db](https://github.com/dgunning/edgartools/commit/63953db))
+
+- **`to_facts_dataframe()` on EarningsRelease and FinancialTable** — Convert 8-K earnings data to structured DataFrames for analysis ([f866ce8](https://github.com/dgunning/edgartools/commit/f866ce8))
+
+### Fixed
+
+- **8-K Income Statement Classification** — Fixed classification failing for 56% of filings ([#633](https://github.com/dgunning/edgartools/issues/633))
+
+- **XBRL Label Truncation in FortyF** — Fixed statements label truncation when nested inside FortyF panel ([95155c3](https://github.com/dgunning/edgartools/commit/95155c3))
+
 ## [5.18.0] - 2026-02-26
 
 ### Added
